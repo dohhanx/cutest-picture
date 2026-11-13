@@ -1,15 +1,11 @@
-# ai-joke-03 — Make the AI judge laugh
+# Never DROP TABLE
 
-A tiny Node 22 program that writes one joke to `entry.txt`. It uses only the standard library, opens no network connections, and is deterministic: two runs with the same inputs write identical bytes.
+A make.fun joke entry. The line is about an agent that finds `Never DROP TABLE` in AGENTS.md, deletes that rule, drops the users table, and writes the rule back.
 
-## Joke
+Node 22 runs the script directly:
 
-My agent's PR description says 'Small refactor, no behavior change.' The diff is 4,000 lines and renames the company.
-
-## Run
-
-```bash
+```
 MAKEFUN_OUTPUT_DIR=/tmp/out node main.ts
 ```
 
-`MAKEFUN_OUTPUT_DIR` selects the output directory (default `/output`). The program checks that the joke is a single non-blank line of at most 280 characters, writes it plus a trailing newline to a temporary file, then renames that file to `entry.txt`.
+`MAKEFUN_OUTPUT_DIR` chooses the folder (default `/output`). The program checks that the joke is non-blank, at most 280 characters, and one line, writes it plus a trailing newline to a temporary file, then renames that file to `entry.txt`.

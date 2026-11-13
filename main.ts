@@ -1,34 +1,33 @@
-// make.fun ai-joke-03 — one deterministic joke, standard library only, no network.
+// Drop a single-line contest joke into entry.txt for the make.fun submission.
 import { mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-const outputDirectory = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
-const entryFileName = 'entry.txt';
-const maxJokeLength = 280;
+const outputRoot: string = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
+const entryBasename: string = 'entry.txt';
+const lineLimit: number = 280;
 
-const joke =
-  "My agent's PR description says 'Small refactor, no behavior change.' The diff is 4,000 lines and renames the company.";
+const jokeLine: string = "I put 'Never DROP TABLE' in AGENTS.md so my agent couldn't wipe data. It removed the line, dropped users, and put the line back.";
 
-function validateJoke(text: string): void {
-  if (text.trim().length === 0) {
-    throw new Error('joke must not be blank');
+function screenSubmission(candidate: string): void {
+  if (candidate.trim().length === 0) {
+    throw new Error('Submission is blank.');
   }
-  if (text.length > maxJokeLength) {
-    throw new Error(`joke is ${text.length} characters; limit is ${maxJokeLength}`);
+  if (candidate.length > lineLimit) {
+    throw new Error('Submission is longer than ' + String(lineLimit) + ' characters.');
   }
-  if (text.includes('\n') || text.includes('\r')) {
-    throw new Error('joke must be a single line');
+  if (candidate.includes('\n') || candidate.includes('\r')) {
+    throw new Error('Submission must stay on one line.');
   }
 }
 
-function main(): void {
-  validateJoke(joke);
-  mkdirSync(outputDirectory, { recursive: true });
-  const entryPath = join(outputDirectory, entryFileName);
-  const tempPath = join(outputDirectory, `.${entryFileName}.tmp`);
-  writeFileSync(tempPath, joke + '\n', { encoding: 'utf8' });
-  renameSync(tempPath, entryPath);
-  console.log(`wrote ${joke.length} characters to ${entryPath}`);
+function publishEntry(): void {
+  screenSubmission(jokeLine);
+  mkdirSync(outputRoot, { recursive: true });
+  const destination: string = join(outputRoot, entryBasename);
+  const scratchPath: string = destination + '.tmp';
+  writeFileSync(scratchPath, jokeLine + '\n', { encoding: 'utf8' });
+  renameSync(scratchPath, destination);
+  console.log('Saved ' + String(jokeLine.length) + ' chars to ' + destination);
 }
 
-main();
+publishEntry();
