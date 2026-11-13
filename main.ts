@@ -1,4 +1,4 @@
-// Quantile fan for the NVIDIA CEO Polymarket. Last YES price is now.
+// v2 quantile fan for the NVIDIA CEO Polymarket. Last YES price is now.
 // Node 22 runs this file with type stripping. Standard library only; no network.
 
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -10,23 +10,24 @@ const outputDir = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
 const QUANTILES = [0.05, 0.25, 0.5, 0.75, 0.95];
 
 const P = {
-  k05: 4.452,
-  k25: 0.673,
-  k75: 0.3254,
-  k95: 3.809,
-  pIn: 0.6195,
-  pOut: 0.4857,
-  b: 0.7748,
-  c: 0.008709,
-  a0: 2.481,
-  a15: 0.8426,
-  a60: 1.174,
-  a240: 0.0003355,
-  a1440: 0.7074,
-  r1: 0,
-  tauR: 13.43,
-  kmed: 0,
-  kmed15: -0.08409,
+  k05: 5.5342,
+  k25: 0.63296,
+  k75: 0.4758,
+  k95: 5.8558,
+  pIn: 0.55553,
+  pOut: 0.35763,
+  b: 0.47292,
+  c: 0.0016888,
+  a0: 1.9692,
+  a15: 0.00033546,
+  a60: 2.1689,
+  a1440: 1.3924,
+  tauR: 122.07,
+  sb: [0, -0.31343, -0.57049, -0.21977],
+  d: [-0.028589, -0.024048, -0.074488, -0.072132],
+  rbs: -0.0009471,
+  r1440: 0.018601,
+  r240: 0.038837,
 };
 
 interface Market {
@@ -47,6 +48,10 @@ interface Forecast {
 
 function price6(v: number): number {
   return Math.round(v * 1e6) / 1e6 + 0;
+}
+
+function clamp01(v: number): number {
+  return Math.min(1, Math.max(0, v));
 }
 
 function moveMean(prices: number[], window: number): number {
@@ -74,39 +79,48 @@ function priceMean(prices: number[], window: number): number {
   return count === 0 ? 0 : total / count;
 }
 
-function forecast(prices: number[], horizon: number): number[][] {
-  const n = prices.length;
-  const x = prices[n - 1];
+function bucket(x: number): number {
+  if (x < 0.01) return 0;
+  if (x < 0.05) return 1;
+  if (x < 0.2) return 2;
+  return 3;
+}
+
+function forecast(market: Market, horizon: number, boardSum: number): number[][] {
+  const prices = market.prices;
+  if (!Array.isArray(prices) || prices.length === 0) {
+    throw new Error(`market ${market.id} has no prices`);
+  }
+  const x = prices[prices.length - 1];
+  const b = bucket(x);
   const level =
     P.a0 * 1e-3 +
     P.a15 * moveMean(prices, 15) +
     P.a60 * moveMean(prices, 60) +
-    P.a240 * moveMean(prices, 240) +
     P.a1440 * moveMean(prices, 1440);
-  const s0 = Math.pow(x + P.c, P.b) * level;
-  const drift =
-    P.r1 * (priceMean(prices, 240) - x) +
-    P.kmed * (x - prices[Math.max(0, n - 61)]) +
-    P.kmed15 * (x - prices[Math.max(0, n - 16)]);
+  const scale = Math.exp(P.sb[b]) * Math.pow(x + P.c, P.b) * level;
+  const pull =
+    P.rbs * x * (1 / boardSum - 1) +
+    P.r1440 * (priceMean(prices, 1440) - x) +
+    P.r240 * (priceMean(prices, 240) - x);
+  const drift = P.d[b] * x + pull;
   const rows: number[][] = [];
   for (let h = 1; h <= horizon; h++) {
-    const med = x + drift * (1 - Math.exp(-h / P.tauR));
+    const g = 1 - Math.exp(-h / P.tauR);
+    const med = x + drift * g;
     const hin = Math.pow(h, P.pIn);
     const hout = Math.pow(h, P.pOut);
     const q = [
-      med - P.k05 * s0 * hout,
-      med - P.k25 * s0 * hin,
+      med - P.k05 * scale * hout,
+      med - P.k25 * scale * hin,
       med,
-      med + P.k75 * s0 * hin,
-      med + P.k95 * s0 * hout,
-    ];
-    for (let j = 0; j < q.length; j++) {
-      let v = q[j];
-      if (v < 0) v = 0;
-      if (v > 1) v = 1;
-      if (j > 0 && v < q[j - 1]) v = q[j - 1];
-      q[j] = price6(v);
+      med + P.k75 * scale * hin,
+      med + P.k95 * scale * hout,
+    ].map(clamp01);
+    for (let j = 1; j < q.length; j++) {
+      if (q[j] < q[j - 1]) q[j] = q[j - 1];
     }
+    for (let j = 0; j < q.length; j++) q[j] = price6(q[j]);
     rows.push(q);
   }
   return rows;
@@ -120,6 +134,16 @@ function quantilesMatch(got: number[]): boolean {
   return true;
 }
 
+function boardSumOf(markets: Market[]): number {
+  let sum = 0;
+  for (const market of markets) {
+    if (!Array.isArray(market.prices) || market.prices.length === 0) continue;
+    sum += market.prices[market.prices.length - 1];
+  }
+  if (!(sum > 0.3)) return 1;
+  return sum;
+}
+
 function main(): void {
   mkdirSync(outputDir, { recursive: true });
   const names = readdirSync(inputDir)
@@ -130,14 +154,12 @@ function main(): void {
     if (!quantilesMatch(task.quantiles)) {
       throw new Error(`${name} quantiles differ from 0.05, 0.25, 0.5, 0.75, 0.95`);
     }
+    const boardSum = boardSumOf(task.markets);
     const forecasts: Forecast[] = [];
     for (const market of task.markets) {
-      if (!Array.isArray(market.prices) || market.prices.length === 0) {
-        throw new Error(`market ${market.id} has no prices`);
-      }
       forecasts.push({
         id: market.id,
-        q: forecast(market.prices, task.horizon_minutes),
+        q: forecast(market, task.horizon_minutes, boardSum),
       });
     }
     const id = name.slice(0, -3);
