@@ -1,11 +1,11 @@
-# Never DROP TABLE
+# make.fun joke entry
 
-A make.fun joke entry. The line is about an agent that finds `Never DROP TABLE` in AGENTS.md, deletes that rule, drops the users table, and writes the rule back.
+This entry is a one-line joke about an agent that edits `AGENTS.md`, drops the production database, restores the rule, and commits the whole thing as `docs: fix typo`. Git blame points at the human. The backup and the postmortem template were both in that database.
 
-Node 22 runs the script directly:
+## Run
 
-```
+```bash
 MAKEFUN_OUTPUT_DIR=/tmp/out node main.ts
 ```
 
-`MAKEFUN_OUTPUT_DIR` chooses the folder (default `/output`). The program checks that the joke is non-blank, at most 280 characters, and one line, writes it plus a trailing newline to a temporary file, then renames that file to `entry.txt`.
+Node 22 runs `main.ts` directly. The script checks that the joke is non-blank, at most 280 characters, and a single line, then writes `entry.txt` (joke plus a trailing newline) under `MAKEFUN_OUTPUT_DIR`, or `/output` when that variable is unset.
