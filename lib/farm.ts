@@ -12,6 +12,8 @@ export interface FarmPlan {
   hold_days: number;
   /** Minutes to open the position, including an allowlist when the category needs one. */
   setup_min: number;
+  /** Fund, open, each points action, claim, and exit. */
+  tx_count: number;
   chain: string;
   steps: string[];
 }
@@ -321,13 +323,12 @@ function specFor(category: string | null): Spec {
   return DEFAULT_SPEC;
 }
 
-/** Whole dollars of capital, stepped up with TVL so a larger book is not farmed with pocket change. */
+/** Minimum ticket. Gas is mostly fixed, so a larger book is not farmed with a $40 wallet. */
 export function capitalFor(tvlUsd: number): number {
-  if (tvlUsd >= 2_000_000_000) return 500;
-  if (tvlUsd >= 500_000_000) return 300;
-  if (tvlUsd >= 100_000_000) return 150;
-  if (tvlUsd >= 20_000_000) return 80;
-  return 40;
+  if (tvlUsd >= 1_000_000_000) return 2000;
+  if (tvlUsd >= 100_000_000) return 1000;
+  if (tvlUsd >= 20_000_000) return 500;
+  return 250;
 }
 
 function holdFor(spec: Spec, ageDays: number | null): number {
@@ -370,6 +371,7 @@ export function farmPlan(protocol: SnapshotProtocol, ageDays: number | null): Fa
   const capital = capitalFor(protocol.tvl_usd);
   const hold = holdFor(spec, ageDays);
   const times = Math.max(1, Math.round(hold / spec.every));
+  const txCount = 1 + spec.setupTxs + times + 2;
   const setupC = gasC * spec.setupTxs;
   const cadenceEachC = gasC;
   const cadenceC = gasC * times;
@@ -380,11 +382,12 @@ export function farmPlan(protocol: SnapshotProtocol, ageDays: number | null): Fa
   const capitalText = money(centsOf(capital));
   const feeNote = known ? '' : ` ${chain} has no listed fee in this model, so each transaction uses the $1 default.`;
   const unbondNote = spec.unbond > 0 ? ` Withdrawal also waits ${spec.unbond} days of unbonding.` : '';
+  const oppCents = Math.round(capital * 0.04 * (hold / 365) * 100);
   const steps = [
     `Fund a fresh wallet on ${chain} with ${capitalText} plus a gas buffer of ${money(bufferC)}. Keep the seed offline and put nothing else in the wallet.${feeNote} Cost: about ${money(gasC)} of gas on ${chain} to move the funds in. Time: 10 minutes.`,
     `${spec.open(protocol.name, chain, capitalText)} Cost: ${capitalText} of capital and about ${money(setupC)} of gas across ${spec.setupTxs} transactions. Time: ${spec.kyc ? 'about 1 day, including the protocol\'s own allowlist' : '20 minutes'}.`,
     `Every ${spec.every} days (${times} times over the ${hold}-day hold), ${spec.cadence}, so ${protocol.name}'s points snapshot records the wallet. Cost: about ${money(cadenceEachC)} of gas on ${chain} each time, ${money(cadenceC)} in all. Time: 10 minutes each time.`,
-    `Keep the position open for ${hold} days so more than one points snapshot includes it.${unbondNote} Cost: the ${capitalText} stays deployed and nothing extra is charged while it sits. Time: ${hold} days.`,
+    `Keep the position open for ${hold} days so more than one points snapshot includes it.${unbondNote} Cost: the ${capitalText} stays deployed, and about ${money(oppCents)} of stable yield is given up at 4% a year. Time: ${hold} days.`,
     `At the end, open ${protocol.name}'s own rewards page and claim points only from that page. Cost: about ${money(claimC)} of gas on ${chain} if a claim transaction is required, otherwise nothing. Time: 10 minutes.`,
     `Exit if ${protocol.name} posts a claim, if its TVL is down by a third from the day you entered, or when the ${hold}-day hold ends, whichever is first. Cost: nothing to check the rule. Time: 5 minutes each week you review it.`,
     `Withdraw to the farm wallet and write the address, the open date and every transaction id in a log. Cost: about ${money(exitC)} of exit gas on ${chain}. Time: 20 minutes.${unbondNote} Plan total: ${capitalText} of capital and about ${money(totalC)} of gas over ${hold} days.`,
@@ -395,6 +398,7 @@ export function farmPlan(protocol: SnapshotProtocol, ageDays: number | null): Fa
     gas_total_usd: totalC / 100,
     hold_days: hold,
     setup_min: spec.kyc ? 1440 : 20,
+    tx_count: txCount,
     chain,
     steps,
   };

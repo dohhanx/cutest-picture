@@ -3,10 +3,13 @@
 // Traded tokens in this snapshot are grouped into families (Aave V2 and V3 share one
 // market cap; TVL is summed). A log-log line is fit to those families:
 //   log10(mcap) = a + b · log10(TVL)    so    value = 10^a × TVL^b
-// with b below 1, so the multiple falls as TVL grows. Category residuals shrink
-// toward the line when a category has fewer than five families. Seasoning, 7-day
-// momentum, chain breadth and a kin penalty then scale the curve. CEX, bridge and
-// liquid-staking rows are not launches and are not fit points. No name is special-cased.
+// A first TVL-only line is the baseline. The line that prices the board is a
+// robust multivariate fit: families whose log multiple sits more than two MAD
+// from the median are plotted and not estimated, then
+//   log10(mcap) = a + b·log10(TVL) + c·momentum + d·log10(1+months) + category effects
+// for categories with at least five families. Chain breadth and a kin penalty
+// are applied after the fit. They are not in the R². The target is recorded
+// market cap. The snapshot has no FDV and no TVL path. No name is special-cased.
 
 import { farmPlan } from './farm.ts';
 
@@ -31,18 +34,20 @@ export interface Snapshot {
   watchlist: string[];
 }
 
-export const MODEL_VERSION = 'northline-2';
+export const MODEL_VERSION = 'northline-3';
 
 export const MODEL = {
   peer_min: 5,
+  /** Families farther than this many MAD of log10(mcap/TVL) are not estimated. */
+  mad_screen: 2,
   airdrop_share: 0.05,
-  momentum_weight: 0.5,
+  /** Stable yield given up while the ticket is locked. */
+  yield_foregone: 0.04,
+  /** Worth it when net drop per $1,000 clears this after gas and foregone yield. */
+  worth_per_1k: 4,
   momentum_cap: 40,
   chain_bump: 0.03,
   chain_cap: 10,
-  season_floor: 0.85,
-  season_span: 0.3,
-  season_months: 36,
   unknown_months: 12,
   days_per_month: 30.4375,
   kin_factor: 0.5,
@@ -67,15 +72,14 @@ const DAY_MS = 86_400_000;
 const VALUE_CAP = 100_000_000_000_000;
 
 export const FORMULA =
-  'value = 10^a × TVL^b × category × seasoning × momentum × breadth × kin. ' +
-  'a and b are the log-log fit of family market cap on family TVL for traded tokens that are not exchanges, bridges or liquid staking. ' +
-  'Versions that share a symbol or a CoinGecko id are one family, and their TVL is summed so the market cap is not counted twice. ' +
-  'The category factor is 10 to the median log residual of that category, shrunk as (n/5) toward 1 when fewer than five families are in the fit. ' +
-  'seasoning = 0.85 + 0.30 × min(months, 36) / 36, months = age_days / 30.4375, unknown listing = 12. ' +
-  'momentum = 1 + 0.5 × clamp(change_7d, −40, 40) / 100, missing change = 1. ' +
-  'breadth = 1 + 3% × min(chains, 10). ' +
-  'kin = 0.5 when the protocol\'s first word is the first word of a protocol that already records a token, else 1. ' +
-  'The low/high band is the fit\'s residual interquartile range, widened when the category is thin.';
+  'Robust log-log with category effects. Families share a symbol or a CoinGecko id and their TVL is summed. ' +
+  'A TVL-only line on every eligible family is the baseline. The pricing line drops families whose log10(mcap/TVL) is more than 2 MAD from the median, then estimates ' +
+  'log10(mcap) = a + b·log10(TVL) + c·momentum + d·log10(1+months) + a category effect. ' +
+  'momentum = clamp(change_7d, −40, 40)/100. months = age_days/30.4375, or 12 when the listing date is missing. ' +
+  'A category effect is estimated when five or more families remain in that category; fewer than five shrink toward no effect by n/5. ' +
+  'value = that fit × breadth × kin. breadth = 1 + 3% × min(chains, 10). kin = 0.5 when the first word matches a protocol that already records a token. ' +
+  'Breadth and kin are not inside the R². The target is recorded market cap, not FDV. ' +
+  'This does not claim a token will be issued, or when.';
 
 export class SnapshotError extends Error {
   constructor(message: string) {
@@ -247,7 +251,16 @@ export interface FitPoint {
   category: string | null;
   tvl: number;
   mcap: number;
+  /** Used to estimate the pricing line. */
   in_fit: boolean;
+  /** Eligible family kept off the line by the MAD screen. */
+  screened: boolean;
+}
+
+export interface ResidualPoint {
+  name: string;
+  fitted: number;
+  residual: number;
 }
 
 export interface CategoryFit {
@@ -255,21 +268,33 @@ export interface CategoryFit {
   n: number;
   factor: number;
   shrunk: boolean;
-  peers: { name: string; tvl: number; mcap: number }[];
+  peers: { name: string; tvl: number; mcap: number; multiple: number; in_fit: boolean }[];
 }
 
 export interface CurveFit {
+  method: string;
   n: number;
+  dropped: number;
   a: number;
   b: number;
+  mom: number;
+  age: number;
+  reference: string;
+  /** Added to a + b·log10(TVL) so the drawn line sits at a typical month and a flat week. */
+  line_shift: number;
   r2: number;
   rmse: number;
   q25: number;
   q75: number;
   loo_median_ape: number;
+  loo_median_dex: number;
+  baseline_n: number;
+  baseline_r2: number;
+  baseline_loo: number;
   holdout_n: number;
   holdout_median_ape: number;
   points: FitPoint[];
+  residuals: ResidualPoint[];
 }
 
 export interface BoardRow {
@@ -294,6 +319,8 @@ export interface BoardRow {
   grade: Grade;
   verdict: Verdict;
   drop_per_1k: number;
+  net_per_1k: number;
+  tx_count: number;
   capital_usd: number;
   gas_usd: number;
   gas_total_usd: number;
@@ -364,77 +391,244 @@ export interface RadarData {
   aside: AsideRow[];
 }
 
-function curveOf(protocols: SnapshotProtocol[]): { fit: CurveFit; categories: CategoryFit[]; inFit: Set<string> } {
-  const families = buildFamilies(protocols).filter((f) => f.mcap > 0 && f.tvl > 0);
-  const usable = (f: Family): boolean => f.primary.category === null || !EXCLUDED.has(f.primary.category);
-  const fitFamilies = families.filter(usable);
-  const held = families.filter((f) => !usable(f));
-  const line = ols(fitFamilies.map((f) => ({ tvl: f.tvl, mcap: f.mcap })));
-  const a = round6(line.a);
-  const b = round6(line.b);
-  const predict = (tvl: number): number => 10 ** (a + b * Math.log10(tvl));
+interface DesignRow {
+  family: Family;
+  category: string;
+  mom: number;
+  lmonths: number;
+  y: number;
+  logTvl: number;
+}
 
-  const looErrors: number[] = [];
-  for (let i = 0; i < fitFamilies.length; i++) {
-    const sample = fitFamilies.filter((_, j) => j !== i).map((f) => ({ tvl: f.tvl, mcap: f.mcap }));
-    const left = ols(sample);
-    const hat = 10 ** (round6(left.a) + round6(left.b) * Math.log10(fitFamilies[i]!.tvl));
-    looErrors.push(Math.abs(hat - fitFamilies[i]!.mcap) / fitFamilies[i]!.mcap);
+function designOf(family: Family, asOf: string): DesignRow {
+  const age = ageDays(asOf, family.primary.listed_at);
+  const months = (age === null ? MODEL.unknown_months * MODEL.days_per_month : age) / MODEL.days_per_month;
+  const change = family.primary.change_7d;
+  return {
+    family,
+    category: family.primary.category ?? 'Uncategorized',
+    mom: clamp(change === null ? 0 : change, -MODEL.momentum_cap, MODEL.momentum_cap) / 100,
+    lmonths: Math.log10(1 + Math.max(0, months)),
+    y: Math.log10(family.mcap),
+    logTvl: Math.log10(family.tvl),
+  };
+}
+
+/** Solve X'X beta = X'y. Returns null when the design is singular. */
+function solveNormal(rows: number[][], y: number[]): number[] | null {
+  const cols = rows[0]!.length;
+  const matrix: number[][] = [];
+  for (let j = 0; j < cols; j++) {
+    const line: number[] = [];
+    for (let k = 0; k < cols; k++) {
+      let sum = 0;
+      for (let i = 0; i < rows.length; i++) sum += rows[i]![j]! * rows[i]![k]!;
+      line.push(sum);
+    }
+    let rhs = 0;
+    for (let i = 0; i < rows.length; i++) rhs += rows[i]![j]! * y[i]!;
+    line.push(rhs);
+    matrix.push(line);
   }
-  const holdoutErrors = held.map((f) => Math.abs(predict(f.tvl) - f.mcap) / f.mcap);
+  for (let col = 0; col < cols; col++) {
+    let pivot = col;
+    for (let row = col + 1; row < cols; row++) {
+      if (Math.abs(matrix[row]![col]!) > Math.abs(matrix[pivot]![col]!)) pivot = row;
+    }
+    if (Math.abs(matrix[pivot]![col]!) < 1e-10) return null;
+    if (pivot !== col) {
+      const swap = matrix[col]!;
+      matrix[col] = matrix[pivot]!;
+      matrix[pivot] = swap;
+    }
+    const scale = matrix[col]![col]!;
+    for (let k = col; k <= cols; k++) matrix[col]![k] = matrix[col]![k]! / scale;
+    for (let row = 0; row < cols; row++) {
+      if (row === col) continue;
+      const factor = matrix[row]![col]!;
+      for (let k = col; k <= cols; k++) matrix[row]![k] = matrix[row]![k]! - factor * matrix[col]![k]!;
+    }
+  }
+  return matrix.map((line) => line[cols]!);
+}
 
-  const byCategory = new Map<string, { resid: number; name: string; tvl: number; mcap: number }[]>();
-  for (const f of fitFamilies) {
-    const category = f.primary.category ?? 'Uncategorized';
-    const resid = Math.log10(f.mcap) - (a + b * Math.log10(f.tvl));
-    const list = byCategory.get(category);
-    const peer = { resid, name: f.primary.name, tvl: f.tvl, mcap: f.mcap };
-    if (list === undefined) byCategory.set(category, [peer]);
-    else list.push(peer);
+function feNames(rows: DesignRow[]): string[] {
+  const counts = new Map<string, number>();
+  for (const row of rows) counts.set(row.category, (counts.get(row.category) ?? 0) + 1);
+  return [...counts.entries()]
+    .filter(([, n]) => n >= MODEL.peer_min)
+    .sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))
+    .map(([name]) => name);
+}
+
+function regressor(row: DesignRow, effects: string[]): number[] {
+  const reference = effects[0] ?? '';
+  const line = [1, row.logTvl, row.mom, row.lmonths];
+  for (const name of effects) if (name !== reference) line.push(row.category === name ? 1 : 0);
+  return line;
+}
+
+function fittedLog(row: DesignRow, beta: number[], effects: string[]): number {
+  const x = regressor(row, effects);
+  let sum = 0;
+  for (let i = 0; i < x.length; i++) sum += x[i]! * beta[i]!;
+  return sum;
+}
+
+function curveOf(protocols: SnapshotProtocol[], asOf: string): { fit: CurveFit; categories: CategoryFit[]; inFit: Set<string> } {
+  const families = buildFamilies(protocols).filter((f) => f.mcap > 0 && f.tvl > 0);
+  const usable = families.filter((f) => f.primary.category === null || !EXCLUDED.has(f.primary.category));
+  const held = families.filter((f) => f.primary.category !== null && EXCLUDED.has(f.primary.category));
+  const baseLine = ols(usable.map((f) => ({ tvl: f.tvl, mcap: f.mcap })));
+  const baseLoo: number[] = [];
+  for (let i = 0; i < usable.length; i++) {
+    const sample = usable.filter((_, j) => j !== i).map((f) => ({ tvl: f.tvl, mcap: f.mcap }));
+    const left = ols(sample);
+    const hat = 10 ** (left.a + left.b * Math.log10(usable[i]!.tvl));
+    baseLoo.push(Math.abs(hat - usable[i]!.mcap) / usable[i]!.mcap);
+  }
+
+  const ratios = usable.map((f) => Math.log10(f.mcap / f.tvl)).sort((p, q) => p - q);
+  const mid = median(ratios);
+  const mad = median(ratios.map((value) => Math.abs(value - mid)).sort((p, q) => p - q)) || 1;
+  const screened = new Set<string>();
+  const sample = usable.filter((f) => {
+    const keep = Math.abs(Math.log10(f.mcap / f.tvl) - mid) <= MODEL.mad_screen * mad;
+    if (!keep) screened.add(f.id);
+    return keep;
+  });
+  const rows = sample.map((f) => designOf(f, asOf));
+  const effects = feNames(rows);
+  const betaRaw = solveNormal(rows.map((row) => regressor(row, effects)), rows.map((row) => row.y));
+  const beta = betaRaw ?? [baseLine.a, baseLine.b, 0, 0];
+  const a = round6(beta[0]!);
+  const b = round6(beta[1]!);
+  const momCoef = round6(beta[2]!);
+  const ageCoef = round6(beta[3]!);
+  const typicalMom = median(rows.map((row) => row.mom).sort((p, q) => p - q));
+  const typicalAge = median(rows.map((row) => row.lmonths).sort((p, q) => p - q));
+  const lineShift = round6(momCoef * typicalMom + ageCoef * typicalAge);
+  const betaUse = [a, b, momCoef, ageCoef, ...beta.slice(4).map((value) => round6(value))];
+
+  const residuals = rows.map((row) => {
+    const fitted = fittedLog(row, betaUse, effects);
+    return { name: row.family.primary.name, fitted: round4(fitted), residual: round4(row.y - fitted), category: row.category };
+  });
+  const residOnly = residuals.map((point) => point.residual).sort((p, q) => p - q);
+  const meanY = rows.reduce((sum, row) => sum + row.y, 0) / rows.length;
+  let ssTot = 0;
+  let ssRes = 0;
+  for (let i = 0; i < rows.length; i++) {
+    ssTot += (rows[i]!.y - meanY) ** 2;
+    ssRes += residuals[i]!.residual ** 2;
+  }
+  const quantile = (p: number): number => {
+    const idx = (residOnly.length - 1) * p;
+    const lo = Math.floor(idx);
+    const hi = Math.ceil(idx);
+    const t = idx - lo;
+    return residOnly[lo]! * (1 - t) + residOnly[hi]! * t;
+  };
+
+  const looApe: number[] = [];
+  const looDex: number[] = [];
+  for (let i = 0; i < rows.length; i++) {
+    const sub = rows.filter((_, j) => j !== i);
+    const subEffects = feNames(sub);
+    const subBeta = solveNormal(sub.map((row) => regressor(row, subEffects)), sub.map((row) => row.y));
+    if (subBeta === null) continue;
+    const yHat = fittedLog(rows[i]!, subBeta, subEffects);
+    looDex.push(Math.abs(yHat - rows[i]!.y));
+    looApe.push(Math.abs(10 ** yHat - rows[i]!.family.mcap) / rows[i]!.family.mcap);
+  }
+
+  const thinResid = new Map<string, number[]>();
+  for (const point of residuals) {
+    if (effects.includes(point.category)) continue;
+    const list = thinResid.get(point.category);
+    if (list === undefined) thinResid.set(point.category, [point.residual]);
+    else list.push(point.residual);
+  }
+  const effectOf = (category: string, n: number): { factor: number; shrunk: boolean } => {
+    const index = effects.indexOf(category);
+    if (index === 0) return { factor: 1, shrunk: false };
+    if (index > 0) return { factor: round4(10 ** betaUse[3 + index]!), shrunk: false };
+    const list = (thinResid.get(category) ?? []).slice().sort((p, q) => p - q);
+    if (n === 0 || list.length === 0) return { factor: 1, shrunk: true };
+    const shrunk = (Math.min(n, MODEL.peer_min) / MODEL.peer_min) * median(list);
+    return { factor: round4(10 ** shrunk), shrunk: true };
+  };
+
+  const byCategory = new Map<string, Family[]>();
+  for (const family of usable) {
+    const key = family.primary.category ?? 'Uncategorized';
+    const list = byCategory.get(key);
+    if (list === undefined) byCategory.set(key, [family]);
+    else list.push(family);
   }
   const categories: CategoryFit[] = [];
   for (const category of [...byCategory.keys()].sort()) {
     const peers = byCategory.get(category)!;
-    const residuals = peers.map((p) => p.resid).sort((p, q) => p - q);
-    const n = residuals.length;
-    const mid = median(residuals);
-    const shrunk = n < MODEL.peer_min;
-    const logFactor = shrunk ? (n / MODEL.peer_min) * mid : mid;
+    const inSample = peers.filter((family) => !screened.has(family.id)).length;
+    const effect = effectOf(category, inSample);
     categories.push({
       category,
-      n,
-      factor: round4(10 ** logFactor),
-      shrunk,
+      n: inSample,
+      factor: effect.factor,
+      shrunk: effect.shrunk,
       peers: peers
         .slice()
-        .sort((p, q) => q.mcap - p.mcap || (p.name < q.name ? -1 : 1))
-        .map((p) => ({ name: p.name, tvl: p.tvl, mcap: p.mcap })),
+        .sort((p, q) => q.mcap - p.mcap || (p.primary.name < q.primary.name ? -1 : 1))
+        .map((family) => ({
+          name: family.primary.name,
+          tvl: family.tvl,
+          mcap: family.mcap,
+          multiple: round4(family.mcap / family.tvl),
+          in_fit: !screened.has(family.id),
+        })),
     });
   }
 
-  const inFit = new Set(fitFamilies.map((f) => f.id));
-  const points: FitPoint[] = families.map((f) => ({
-    name: f.members.length > 1 ? `${f.primary.name} +${f.members.length - 1}` : f.primary.name,
-    category: f.primary.category,
-    tvl: f.tvl,
-    mcap: f.mcap,
-    in_fit: inFit.has(f.id),
+  const predictHold = (family: Family): number => {
+    const row = designOf(family, asOf);
+    return 10 ** fittedLog(row, betaUse, effects);
+  };
+  const holdoutErrors = held.map((family) => Math.abs(predictHold(family) - family.mcap) / family.mcap);
+  const inFit = new Set(sample.map((family) => family.id));
+  const points: FitPoint[] = families.map((family) => ({
+    name: family.members.length > 1 ? `${family.primary.name} +${family.members.length - 1}` : family.primary.name,
+    category: family.primary.category,
+    tvl: family.tvl,
+    mcap: family.mcap,
+    in_fit: inFit.has(family.id),
+    screened: screened.has(family.id),
   }));
   points.sort((p, q) => p.tvl - q.tvl || (p.name < q.name ? -1 : 1));
 
   return {
     fit: {
-      n: line.n,
+      method: 'robust log-log with category effects',
+      n: sample.length,
+      dropped: screened.size,
       a,
       b,
-      r2: round4(line.r2),
-      rmse: round4(line.rmse),
-      q25: round4(line.q25),
-      q75: round4(line.q75),
-      loo_median_ape: round4(medianAbsPct(looErrors)),
+      mom: momCoef,
+      age: ageCoef,
+      reference: effects[0] ?? 'none',
+      line_shift: lineShift,
+      r2: round4(ssTot === 0 ? 0 : 1 - ssRes / ssTot),
+      rmse: round4(Math.sqrt(ssRes / Math.max(rows.length, 1))),
+      q25: round4(quantile(0.25)),
+      q75: round4(quantile(0.75)),
+      loo_median_ape: round4(medianAbsPct(looApe)),
+      loo_median_dex: round4(median(looDex.slice().sort((p, q) => p - q))),
+      baseline_n: usable.length,
+      baseline_r2: round4(baseLine.r2),
+      baseline_loo: round4(medianAbsPct(baseLoo)),
       holdout_n: held.length,
       holdout_median_ape: held.length === 0 ? 0 : round4(medianAbsPct(holdoutErrors)),
       points,
+      residuals: residuals.map((point) => ({ name: point.name, fitted: point.fitted, residual: point.residual })),
     },
     categories,
     inFit,
@@ -455,10 +649,11 @@ function gradeFor(peerN: number, changeMissing: boolean, ageMissing: boolean): G
   return 'C';
 }
 
-/** Net airdrop per $1,000 of ticket after the plan's gas, also scaled per $1,000. */
-export function verdictFor(dropPer1k: number, capital: number, gasTotal: number): Verdict {
-  const netPer1k = dropPer1k - (gasTotal * 1000) / Math.max(capital, 1);
-  if (netPer1k >= 6) return 'worth';
+/** Net of gas and 4% foregone yield, per $1,000 of the minimum ticket. */
+export function verdictFor(dropPer1k: number, capital: number, gasTotal: number, holdDays: number): Verdict {
+  const foregone = 1000 * MODEL.yield_foregone * (holdDays / 365);
+  const netPer1k = dropPer1k - (gasTotal * 1000) / Math.max(capital, 1) - foregone;
+  if (netPer1k >= MODEL.worth_per_1k) return 'worth';
   if (netPer1k > 0) return 'thin';
   return 'skip';
 }
@@ -483,7 +678,7 @@ function kinOf(p: SnapshotProtocol, parents: Map<string, string>): string | null
 }
 
 export function buildRadar(snapshot: Snapshot): { board: BoardRow[]; radar: RadarData } {
-  const { fit, categories, inFit } = curveOf(snapshot.protocols);
+  const { fit, categories, inFit } = curveOf(snapshot.protocols, snapshot.as_of);
   const families = buildFamilies(snapshot.protocols);
   const familyByMember = new Map<string, Family>();
   for (const family of families) for (const member of family.members) familyByMember.set(member.slug, family);
@@ -524,10 +719,10 @@ export function buildRadar(snapshot: Snapshot): { board: BoardRow[]; radar: Rada
     const cat = factorFor(categories, p.category);
     const age = ageDays(snapshot.as_of, p.listed_at);
     const monthsExact = age === null ? MODEL.unknown_months : age / MODEL.days_per_month;
-    const seasoned = clamp(monthsExact, 0, MODEL.season_months);
-    const seasoning = round4(MODEL.season_floor + MODEL.season_span * (seasoned / MODEL.season_months));
     const changeMissing = p.change_7d === null;
-    const momentum = round4(1 + MODEL.momentum_weight * (clamp(changeMissing ? 0 : p.change_7d!, -MODEL.momentum_cap, MODEL.momentum_cap) / 100));
+    const momInput = clamp(changeMissing ? 0 : p.change_7d!, -MODEL.momentum_cap, MODEL.momentum_cap) / 100;
+    const seasoning = round4(10 ** (fit.age * Math.log10(1 + Math.max(0, monthsExact))));
+    const momentum = round4(10 ** (fit.mom * momInput));
     const breadth = round4(1 + MODEL.chain_bump * Math.min(p.chains.length, MODEL.chain_cap));
     const parent = kinOf(p, parents);
     const kin = parent !== null;
@@ -539,6 +734,8 @@ export function buildRadar(snapshot: Snapshot): { board: BoardRow[]; radar: Rada
     const high = Math.min(VALUE_CAP, Math.max(implied, Math.round(implied * 10 ** (fit.q75 * widen))));
     const plan = farmPlan(p, age);
     const drop = Number((((implied * MODEL.airdrop_share) / Math.max(p.tvl_usd, 1)) * 1000).toFixed(2));
+    const foregonePer1k = 1000 * MODEL.yield_foregone * (plan.hold_days / 365);
+    const netPer1k = Number((drop - (plan.gas_total_usd * 1000) / plan.capital_usd - foregonePer1k).toFixed(2));
     return {
       p,
       stage,
@@ -558,7 +755,8 @@ export function buildRadar(snapshot: Snapshot): { board: BoardRow[]; radar: Rada
       grade: gradeFor(cat.n, changeMissing, age === null),
       plan,
       drop,
-      verdict: verdictFor(drop, plan.capital_usd, plan.gas_total_usd),
+      netPer1k,
+      verdict: verdictFor(drop, plan.capital_usd, plan.gas_total_usd, plan.hold_days),
     };
   });
   scored.sort((a, b) => b.implied - a.implied || (a.p.slug < b.p.slug ? -1 : a.p.slug > b.p.slug ? 1 : 0));
@@ -584,8 +782,10 @@ export function buildRadar(snapshot: Snapshot): { board: BoardRow[]; radar: Rada
     high_usd: s.high,
     grade: s.grade,
     verdict: s.verdict,
-    drop_per_1k: s.drop,
-    capital_usd: s.plan.capital_usd,
+      drop_per_1k: s.drop,
+      net_per_1k: s.netPer1k,
+      tx_count: s.plan.tx_count,
+      capital_usd: s.plan.capital_usd,
     gas_usd: s.plan.gas_usd,
     gas_total_usd: s.plan.gas_total_usd,
     setup_min: s.plan.setup_min,

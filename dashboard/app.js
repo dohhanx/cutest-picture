@@ -170,25 +170,25 @@
     function lineAt(shift) {
       ctx.beginPath();
       var x = x0;
-      ctx.moveTo(X(x), Y(DATA.fit.a + DATA.fit.b * x + shift));
+      ctx.moveTo(X(x), Y(DATA.fit.a + DATA.fit.line_shift + DATA.fit.b * x + shift));
       x = x1;
-      ctx.lineTo(X(x), Y(DATA.fit.a + DATA.fit.b * x + shift));
+      ctx.lineTo(X(x), Y(DATA.fit.a + DATA.fit.line_shift + DATA.fit.b * x + shift));
       ctx.stroke();
     }
-    ctx.strokeStyle = '#e7b2a4';
-    ctx.lineWidth = 6;
+    ctx.strokeStyle = 'rgba(196, 73, 44, 0.18)';
+    ctx.lineWidth = 10;
     lineAt(0);
     ctx.strokeStyle = '#1c1915';
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = 1.6;
     lineAt(0);
     pts.forEach(function (p) {
       ctx.beginPath();
-      ctx.fillStyle = p.in_fit ? '#c4492c' : '#c8bfb2';
-      ctx.arc(X(Math.log10(p.tvl)), Y(Math.log10(p.mcap)), p.in_fit ? 3.2 : 2.4, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.arc(X(Math.log10(p.tvl)), Y(Math.log10(p.mcap)), p.in_fit ? 3.2 : 2.6, 0, Math.PI * 2);
+      if (p.screened) { ctx.strokeStyle = '#c4492c'; ctx.lineWidth = 1.2; ctx.stroke(); }
+      else { ctx.fillStyle = p.in_fit ? '#c4492c' : '#c8bfb2'; ctx.fill(); }
     });
     document.getElementById('chart-note').textContent =
-      'b ' + DATA.fit.b.toFixed(2) + '   R² ' + DATA.fit.r2.toFixed(2) + '   half-band ' + DATA.fit.rmse.toFixed(2) + ' dex   ' + DATA.fit.n + ' families in the line';
+      'b ' + DATA.fit.b.toFixed(2) + '   R² ' + DATA.fit.r2.toFixed(2) + ' (TVL-only was ' + DATA.fit.baseline_r2.toFixed(2) + ')   RMSE ' + DATA.fit.rmse.toFixed(2) + ' dex   ' + DATA.fit.n + ' families, ' + DATA.fit.dropped + ' screened out';
   }
 
   function drawHist() {
@@ -353,7 +353,7 @@
       ));
     });
     document.getElementById('foot').textContent =
-      'Floor is the watchlist. Early is above $' + commas(DATA.floor_usd) + ' and off that list. Drop / $1k assumes a 5% airdrop share of implied value. Grade is the comp set: A is eight or more families with a full record.';
+      'Floor is the watchlist. Early is above $' + commas(DATA.floor_usd) + ' and off that list. This prices today\'s TVL on tokens that already trade. It does not say a token will be issued. Worth it means $4 or more per $1,000 after gas and a 4% yield given up.';
   }
 
   function splitStep(text) {
@@ -377,7 +377,6 @@
     var cat = null;
     DATA.categories.forEach(function (item) { if (item.category === (row.category || 'Uncategorized')) cat = item; });
     var gasPer = row.gas_total_usd * 1000 / row.capital_usd;
-    var net = row.drop_per_1k - gasPer;
     sheet.hidden = false;
     sheet.textContent = '';
     var steps = el('ol', { class: 'steps' });
@@ -388,7 +387,9 @@
         el('div', { class: 'step' }, el('p', { text: piece.action }), el('p', { class: 'when', text: 'Cost ' + piece.cost + ' · Time ' + piece.time }))
       ));
     });
-    var peers = cat ? cat.peers.slice(0, 4).map(function (peer) { return peer.name + ' ' + money(peer.mcap); }).join(' · ') : 'none';
+    var peers = cat ? cat.peers.slice(0, 5).map(function (peer) {
+      return peer.name + ' ' + peer.multiple.toFixed(2) + '×' + (peer.in_fit ? '' : ' screened');
+    }).join(' · ') : 'none';
     sheet.appendChild(el('div', { class: 'sheet-head' },
       el('div', {}, badge(row.stage), ' ', el('span', { class: 'grade ' + row.grade, text: 'Grade ' + row.grade }), ' ', verdictChip(row.verdict),
         el('h2', { text: row.name }),
@@ -406,14 +407,15 @@
         el('p', { class: check === row.implied_value_usd ? 'note' : 'note warn', text: check === row.implied_value_usd ? 'impliedOf matches the board.' : 'impliedOf recomputes ' + money(check) + '.' }),
         el('dl', {},
           el('dt', { text: 'Curve base' }), el('dd', { text: money(row.model.base_usd) + ' = 10^' + DATA.fit.a.toFixed(3) + ' × TVL^' + DATA.fit.b.toFixed(3) }),
-          el('dt', { text: 'Category' }), el('dd', { text: row.model.category_factor.toFixed(3) + '× from ' + row.model.peer_n + ' families' + (row.model.shrunk ? ', shrunk toward the line' : '') }),
+          el('dt', { text: 'Category' }), el('dd', { text: row.model.category_factor.toFixed(3) + '× from ' + row.model.peer_n + ' families' + (row.model.shrunk ? ', shrunk toward ' + DATA.fit.reference : ', estimated effect') }),
           el('dt', { text: 'Seasoning' }), el('dd', { text: row.model.months.toFixed(1) + ' months → ' + row.model.seasoning.toFixed(3) }),
           el('dt', { text: 'Momentum' }), el('dd', { text: pct(row.change_7d) + ' → ' + row.model.momentum.toFixed(3) }),
           el('dt', { text: 'Breadth' }), el('dd', { text: row.chains.length + ' chains → ' + row.model.breadth.toFixed(3) }),
           el('dt', { text: 'Kin' }), el('dd', { text: row.kin ? '0.50, parent ' + row.kin_of : '1.00, no tokened parent' })
         ),
-        el('p', { class: 'note', text: 'Comps used: ' + (peers || 'no priced family in this category, so the factor is 1.') }),
-        el('p', { class: 'note', text: 'Drop $' + row.drop_per_1k.toFixed(2) + ' per $1,000 before gas. Gas is $' + gasPer.toFixed(2) + ' per $1,000. Net $' + net.toFixed(2) + ' on a $' + row.capital_usd + ' ticket, ' + row.setup_min + ' min to open, ' + row.hold_days + ' days held.' })
+        el('p', { class: 'note', text: 'Comps, mcap/TVL: ' + (peers || 'none in this category.') }),
+        el('p', { class: 'note', text: 'The snapshot has no TVL path, only the seven-day change (' + pct(row.change_7d) + ').' }),
+        el('p', { class: 'note', text: 'Drop $' + row.drop_per_1k.toFixed(2) + ' per $1,000 if 5% of implied value is shared across TVL. Gas $' + gasPer.toFixed(2) + ' per $1,000 across ' + row.tx_count + ' transactions. Foregone yield at 4% is in the net. Net $' + row.net_per_1k.toFixed(2) + ' per $1,000. Worth it at $4 or more, thin if positive, otherwise skip.' })
       ),
       el('section', { class: 'panel' },
         el('h3', { text: 'Farm plan' }),
@@ -500,29 +502,62 @@
     if (root.childNodes.length) return;
     var fit = DATA.fit;
     var tiles = [
-      [fit.n + '', 'Families in the fit'],
+      [fit.baseline_r2.toFixed(2) + ' → ' + fit.r2.toFixed(2), 'R², TVL-only then robust'],
       [fit.b.toFixed(3), 'Elasticity b'],
-      [fit.r2.toFixed(3), 'R²'],
-      [fit.rmse.toFixed(3) + ' dex', 'Half-band, RMSE'],
-      [(fit.loo_median_ape * 100).toFixed(0) + '%', 'Leave-one-out median error'],
-      [(fit.holdout_median_ape * 100).toFixed(0) + '%', 'Hold-out median error, n=' + fit.holdout_n]
+      [fit.rmse.toFixed(2) + ' dex', 'Residual RMSE'],
+      [fit.loo_median_dex.toFixed(2) + ' dex', 'Leave-one-out median miss'],
+      [(fit.baseline_loo * 100).toFixed(0) + '% → ' + (fit.loo_median_ape * 100).toFixed(0) + '%', 'Leave-one-out level error'],
+      [fit.reference, 'Reference category']
     ];
     var stats = el('div', { class: 'stats' });
     tiles.forEach(function (tile) { stats.appendChild(el('div', { class: 'stat' }, el('b', { text: tile[0] }), el('span', { text: tile[1] }))); });
     root.appendChild(stats);
+    root.appendChild(el('figure', { class: 'chart-card', style: 'margin-top:12px' },
+      el('figcaption', { text: 'Residuals of the pricing line' }),
+      el('canvas', { id: 'resid', width: '640', height: '220' })
+    ));
+    drawResiduals();
     var body = el('tbody');
     DATA.categories.forEach(function (cat) {
       body.appendChild(el('tr', {},
         el('td', { text: cat.category }),
         el('td', { class: 'num right', text: String(cat.n) }),
         el('td', { class: 'num right', text: cat.factor.toFixed(2) + '×' }),
-        el('td', { text: cat.shrunk ? 'Shrunk toward the line' : 'Full residual' })
+        el('td', { text: cat.shrunk ? 'Shrunk toward ' + DATA.fit.reference : 'Estimated effect' })
       ));
     });
     root.appendChild(el('div', { class: 'table-wrap', style: 'margin-top:12px' }, el('table', {},
       el('thead', {}, el('tr', {}, el('th', { text: 'Category' }), el('th', { class: 'right', text: 'Families' }), el('th', { class: 'right', text: 'Factor' }), el('th', { text: 'Treatment' }))),
       body
     )));
+  }
+
+  function drawResiduals() {
+    var canvas = document.getElementById('resid');
+    if (!canvas) return;
+    var ctx = canvas.getContext('2d');
+    var pts = DATA.fit.residuals;
+    var w = canvas.width;
+    var h = canvas.height;
+    var pad = { l: 36, r: 12, t: 12, b: 22 };
+    var xs = pts.map(function (p) { return p.fitted; });
+    var ys = pts.map(function (p) { return p.residual; });
+    var x0 = Math.min.apply(null, xs);
+    var x1 = Math.max.apply(null, xs);
+    var yMax = Math.max(0.4, Math.max.apply(null, ys.map(Math.abs)));
+    function X(v) { return pad.l + (v - x0) / Math.max(1e-6, x1 - x0) * (w - pad.l - pad.r); }
+    function Y(v) { return pad.t + (1 - (v + yMax) / (2 * yMax)) * (h - pad.t - pad.b); }
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = '#fbf8f3';
+    ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = '#1c1915';
+    ctx.beginPath(); ctx.moveTo(pad.l, Y(0)); ctx.lineTo(w - pad.r, Y(0)); ctx.stroke();
+    pts.forEach(function (p) {
+      ctx.beginPath();
+      ctx.fillStyle = '#c4492c';
+      ctx.arc(X(p.fitted), Y(p.residual), 3, 0, Math.PI * 2);
+      ctx.fill();
+    });
   }
 
   function csvEscape(value) {
