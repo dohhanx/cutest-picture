@@ -69,12 +69,12 @@ copyFiles(join(here, 'dashboard'), join(out, 'dashboard'));
 const shots = copyFiles(join(here, 'screenshots'), join(out, 'screenshots'));
 
 const lines = [
-  `northline: ${snapshot.protocols.length} protocols, ${radar.watchlist_size} watchlist, ${radar.board_size} rows (${radar.floor_size} floor, ${radar.early_size} early, ${radar.scout_size} scout), ${radar.live_size} priced tokens`,
-  `northline: global mcap/TVL n=${radar.global.n} p10=${radar.global.p10} p90=${radar.global.p90} trimmed=${radar.global.trimmed_median}`,
+  `northline: ${radar.tracked} tracked, ${radar.pre_token} record no token, ${radar.board_size} on the board (${radar.floor_size} floor, ${radar.early_size} early, ${radar.scout_size} scout, ${radar.kin_size} kin), ${radar.tokened_size} tokened, ${radar.aside_size} set aside`,
+  `northline: curve n=${radar.fit.n} a=${radar.fit.a} b=${radar.fit.b} R2=${radar.fit.r2} rmse=${radar.fit.rmse} loo=${radar.fit.loo_median_ape} holdout=${radar.fit.holdout_n}/${radar.fit.holdout_median_ape} sum=${millions(radar.implied_sum)} median×${radar.median_multiple}`,
 ];
 for (const row of board.slice(0, 15)) {
   lines.push(
-    `  #${String(row.rank).padStart(3, ' ')} ${millions(row.implied_value_usd).padStart(10)}  ${row.stage.padEnd(5)}  x${row.model.multiple.toFixed(3)}  n=${String(row.model.peer_n).padStart(2)}  ${(row.category ?? '-').padEnd(28)}  ${row.name}`,
+    `  #${String(row.rank).padStart(3, ' ')} ${millions(row.implied_value_usd).padStart(10)}  ${row.stage.padEnd(5)}  ${row.grade}  ${row.verdict.padEnd(5)}  $${String(row.drop_per_1k).padStart(7)}  ${(row.category ?? '-').padEnd(26)}  ${row.name}`,
   );
 }
 process.stdout.write(`${lines.join('\n')}\n`);

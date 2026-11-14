@@ -5,8 +5,13 @@ import type { SnapshotProtocol } from './model.ts';
 
 export interface FarmPlan {
   capital_usd: number;
+  /** One simple transfer on the farm chain. */
   gas_usd: number;
+  /** Fund + open + cadence + claim + exit. */
+  gas_total_usd: number;
   hold_days: number;
+  /** Minutes to open the position, including an allowlist when the category needs one. */
+  setup_min: number;
   chain: string;
   steps: string[];
 }
@@ -355,7 +360,7 @@ function seal(step: string): string {
   return text;
 }
 
-/** Six steps: fund, open, points cadence, hold, claim, exit. Costs are gas plus capital. */
+/** Seven steps: fund, open, points cadence, hold, claim, exit rule, withdraw. */
 export function farmPlan(protocol: SnapshotProtocol, ageDays: number | null): FarmPlan {
   const chain = protocol.chains[0] ?? 'its primary chain';
   const known = Object.prototype.hasOwnProperty.call(GAS_USD, chain);
@@ -381,7 +386,16 @@ export function farmPlan(protocol: SnapshotProtocol, ageDays: number | null): Fa
     `Every ${spec.every} days (${times} times over the ${hold}-day hold), ${spec.cadence}, so ${protocol.name}'s points snapshot records the wallet. Cost: about ${money(cadenceEachC)} of gas on ${chain} each time, ${money(cadenceC)} in all. Time: 10 minutes each time.`,
     `Keep the position open for ${hold} days so more than one points snapshot includes it.${unbondNote} Cost: the ${capitalText} stays deployed and nothing extra is charged while it sits. Time: ${hold} days.`,
     `At the end, open ${protocol.name}'s own rewards page and claim points only from that page. Cost: about ${money(claimC)} of gas on ${chain} if a claim transaction is required, otherwise nothing. Time: 10 minutes.`,
+    `Exit if ${protocol.name} posts a claim, if its TVL is down by a third from the day you entered, or when the ${hold}-day hold ends, whichever is first. Cost: nothing to check the rule. Time: 5 minutes each week you review it.`,
     `Withdraw to the farm wallet and write the address, the open date and every transaction id in a log. Cost: about ${money(exitC)} of exit gas on ${chain}. Time: 20 minutes.${unbondNote} Plan total: ${capitalText} of capital and about ${money(totalC)} of gas over ${hold} days.`,
   ].map(seal);
-  return { capital_usd: capital, gas_usd: gas, hold_days: hold, chain, steps };
+  return {
+    capital_usd: capital,
+    gas_usd: gas,
+    gas_total_usd: totalC / 100,
+    hold_days: hold,
+    setup_min: spec.kyc ? 1440 : 20,
+    chain,
+    steps,
+  };
 }
