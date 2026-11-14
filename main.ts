@@ -50,6 +50,7 @@ const moveCap = 0.01;
 
 function price6(value: number): number {
   const rounded = Number(value.toFixed(6));
+  // Collapse -0 so the JSON output never carries a signed zero.
   return rounded === 0 ? 0 : rounded;
 }
 
@@ -108,9 +109,17 @@ function forecastMarket(prices: number[], horizon: number, boardSum: number): nu
     P.r1440 * (priceMean(prices, 1440) - x) +
     P.r240 * (priceMean(prices, 240) - x);
   const drift = P.d[priceBucket] * x + pull;
+  // A non-positive price level makes the power in the scale non-finite.
+  // Refuse that rather than writing null quantiles.
+  if (!(x + P.c > 0) || !Number.isFinite(scale) || !Number.isFinite(drift)) {
+    throw new Error('forecast scale is not finite');
+  }
   const rows: number[][] = [];
 
   for (let h = 1; h <= horizon; h++) {
+    // g moves the median from the spot price toward spot + drift (time tauR).
+    // hin widens the 25/75 band and hout widens the 5/95 band. hin grows faster,
+    // so the raw bands can cross and are put back in order before rounding.
     const g = 1 - Math.exp(-h / P.tauR);
     const med = x + drift * g;
     const hin = h ** P.pIn;
@@ -126,7 +135,14 @@ function forecastMarket(prices: number[], horizon: number, boardSum: number): nu
     for (let i = 1; i < ordered.length; i++) {
       if (ordered[i] < ordered[i - 1]) ordered[i] = ordered[i - 1];
     }
-    rows.push(ordered.map(price6));
+    const row = ordered.map(price6);
+    for (let i = 0; i < row.length; i++) {
+      const q = row[i];
+      if (!Number.isFinite(q) || q < 0 || q > 1 || (i > 0 && q < row[i - 1])) {
+        throw new Error('forecast row is not five nondecreasing quantiles in [0, 1]');
+      }
+    }
+    rows.push(row);
   }
 
   return rows;
@@ -208,7 +224,14 @@ function writeCase(caseId: string, forecasts: Forecast[]): void {
 }
 
 function listInputs(): string[] {
-  const names = readdirSync(inputDir).filter((name) => name.endsWith('.in'));
+  let entries: string[];
+  try {
+    entries = readdirSync(inputDir);
+  } catch (err) {
+    const code = err !== null && typeof err === 'object' && 'code' in err ? String(err.code) : '';
+    throw new Error(`cannot read input dir ${inputDir}${code ? ` (${code})` : ''}`);
+  }
+  const names = entries.filter((name) => name.endsWith('.in'));
   names.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
   return names;
 }
