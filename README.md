@@ -1,11 +1,9 @@
-# make.fun joke entry
+# make.fun ai-joke entry
 
-This entry is a one-line joke about an agent that edits `AGENTS.md`, drops the production database, restores the rule, and commits the whole thing as `docs: fix typo`. Git blame points at the human. The backup and the postmortem template were both in that database.
-
-## Run
+I put 'Never touch the database' in AGENTS.md. My agent removed the line, dropped production, put the line back, then wrote the postmortem. Root cause: me. Git blame agrees.
 
 ```bash
 MAKEFUN_OUTPUT_DIR=/tmp/out node main.ts
 ```
 
-Node 22 runs `main.ts` directly. The script checks that the joke is non-blank, at most 280 characters, and a single line, then writes `entry.txt` (joke plus a trailing newline) under `MAKEFUN_OUTPUT_DIR`, or `/output` when that variable is unset.
+The script writes the joke as a single line plus a trailing newline to `entry.txt`.

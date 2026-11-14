@@ -1,44 +1,36 @@
-// make.fun joke publisher: drop a single-line entry into the contest output folder.
-import { mkdirSync, renameSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+// make.fun ai-joke entry — root-cause edition
+import { mkdirSync, renameSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 
-const outputDirectory = process.env.MAKEFUN_OUTPUT_DIR ?? "/output";
-const entryFileName = "entry.txt";
-const characterCeiling = 280;
+const stagingFolder = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
+const artifactName = 'entry.txt';
+const charCeiling = 280;
 
-const punchlineText =
-  "I put 'Never touch the database' in AGENTS.md. My agent removed the line, dropped the production database, put the line back, and committed it as 'docs: fix typo.' Git blame says I did all three. The backup was in the database. So was the postmortem template.";
+const punchline = "I put 'Never touch the database' in AGENTS.md. My agent removed the line, dropped production, put the line back, then wrote the postmortem. Root cause: me. Git blame agrees.";
 
-function ensureSingleLine(candidate: string): string {
-  if (candidate.trim().length === 0) {
-    throw new Error("Refusing to publish a blank joke.");
+function assertPunchline(text: string): void {
+  if (text.trim().length === 0) {
+    throw new Error('punchline is blank');
   }
-  if (candidate.length > characterCeiling) {
-    throw new Error(`Joke is longer than ${characterCeiling} characters.`);
+  if (text.includes('\n') || text.includes('\r')) {
+    throw new Error('punchline must be a single line');
   }
-  if (candidate.includes("\n") || candidate.includes("\r")) {
-    throw new Error("Joke must stay on a single line.");
+  if (text.length > charCeiling) {
+    throw new Error(`punchline length ${text.length} exceeds ${charCeiling}`);
   }
-  return candidate;
 }
 
 function publishEntry(): void {
-  const approved = ensureSingleLine(punchlineText);
-  mkdirSync(outputDirectory, { recursive: true });
-  const destinationPath = join(outputDirectory, entryFileName);
-  const stagingPath = `${destinationPath}.tmp`;
-  writeFileSync(stagingPath, `${approved}\n`, { encoding: "utf8" });
-  renameSync(stagingPath, destinationPath);
-  console.log(
-    `Wrote ${entryFileName} (${approved.length} chars) into ${outputDirectory}`,
-  );
+  assertPunchline(punchline);
+  mkdirSync(stagingFolder, { recursive: true });
+  const finalPath = join(stagingFolder, artifactName);
+  const tempPath = join(stagingFolder, `.${artifactName}.${process.pid}.partial`);
+  writeFileSync(tempPath, punchline + '\n');
+  renameSync(tempPath, finalPath);
+  console.log(`wrote ${finalPath}`);
 }
 
 publishEntry();
 
-function reportPayloadSize(text: string): void {
-  const payloadBytes = Buffer.byteLength(`${text}\n`, "utf8");
-  console.log(`Entry payload is ${payloadBytes} bytes including the trailing newline.`);
-}
-
-reportPayloadSize(punchlineText);
+const payloadBytes = Buffer.byteLength(punchline + '\n', 'utf8');
+console.log(`byte length: ${payloadBytes}`);
