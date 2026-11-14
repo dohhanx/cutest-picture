@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Northline — pre-token launch radar</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<a class="skip" href="#board">Skip to the board</a>
+<header class="top">
+  <div class="brand">
+    <span class="mark" aria-hidden="true"></span>
+    <div>
+      <p class="name">Northline</p>
+      <p class="tag">Pre-token launch radar</p>
+    </div>
+  </div>
+  <nav class="tabs" aria-label="Views">
+    <button type="button" id="tab-board" data-tab="board">Board</button>
+    <button type="button" id="tab-live" data-tab="live">Comps</button>
+    <button type="button" id="tab-model" data-tab="model">Model</button>
+  </nav>
+  <p class="asof" id="asof"></p>
+</header>
+<main id="board">
+  <section id="view-board">
+    <p class="lede">Implied value = TVL × category mcap/TVL × 7-day growth × months with no token recorded.</p>
+    <div id="stats" class="stats"></div>
+    <div id="controls" class="controls"></div>
+    <div class="table-wrap">
+      <table>
+        <thead id="thead"></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <p class="foot" id="foot"></p>
+  </section>
+  <section id="view-live" hidden>
+    <p class="lede">Priced tokens in this snapshot are the comps. CEX, bridge and liquid-staking categories stay out of the multiples.</p>
+    <div id="live-root"></div>
+  </section>
+  <section id="view-model" hidden>
+    <article class="prose">
+      <h1>How a row gets its number</h1>
+      <p>implied = round(TVL × category multiple × growth × seasoning). The same product is what <code>impliedOf</code> recomputes in the page, and it has to match the board.</p>
+      <p>The category multiple is the 10% trimmed median of live-token market cap divided by TVL, for priced peers in that category. Each ratio is capped at 5× the global 90th percentile first, so one float on a thin TVL cannot print a multiple in the hundreds. The global median clamps ratios to the 10th–90th percentile, then uses the same trimmed median.</p>
+      <p>Fewer than five peers and the median shrinks: (n/5) × category + (1 − n/5) × global. No peers uses the global median alone. growth = 1 + 0.35 × clamp(change_7d, −40, 80) / 100, and a missing change counts as 0. seasoning = 0.82 + 0.36 × min(months, 30) / 30, with months = age_days / 30.4375 and an unknown listing treated as 12 months. The low/high band widens when the category is thin or a figure is missing.</p>
+      <p>CEX, Bridge, Canonical Bridge, Cross Chain Bridge, Liquid Staking, Liquid Restaking and Restaked BTC are left out of the comps and out of the pre-token board, along with versioned, wrapped, staked and exchange-prefixed names. The watchlist is still covered in full. Early means above the floor and not on the watchlist. No protocol name is special-cased.</p>
+      <h2>Farm plans</h2>
+      <p>Capital steps with TVL: $40, $80, $150, $300, then $500. Gas is a fee table for the protocol's first chain (Ethereum $14, Base $0.28, Solana $0.15, Polygon $0.18, and the rest of the table; $1 when the chain is not listed). Hold length comes from the category, plus 14 days when the listing is under 120 days old. Each plan has six steps — fund, open, a points action on a fixed cadence, hold, claim, exit — and every step states a dollar cost and a time.</p>
+    </article>
+    <div id="model-root"></div>
+  </section>
+</main>
+<div id="sheet" class="sheet" hidden></div>
+<script src="../data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
