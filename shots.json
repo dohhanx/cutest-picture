@@ -1,0 +1,6 @@
+[
+  { "name": "01-cover.jpg", "query": "?shot=cover&seed=7" },
+  { "name": "02-buy.jpg", "query": "?shot=buy&seed=7" },
+  { "name": "03-plant.jpg", "query": "?shot=plant&seed=7" },
+  { "name": "04-title.jpg", "query": "?shot=title&seed=7" }
+]
