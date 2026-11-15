@@ -97,7 +97,9 @@ function moveActor(actor, dt) {
       actor.stepAcc = 0;
       const radius = actor.crouch ? 4.2 : actor.cmd.walk ? 7.5 : 14;
       emitSound('step', actor.x, actor.z, actor.org, radius);
-      if (actor.id === 0) step();
+      const hear = state.actors[0];
+      const pan = actor.id === 0 ? 0 : (actor.x - hear.x) / 14;
+      step(pan, actor.id === 0 ? 0.05 : 0.02);
     }
   }
 }

@@ -76,7 +76,8 @@ function decide(actor) {
     const dy = (foe.y + 1.15) - ey;
     const dz = foe.z - actor.z;
     const dist = Math.hypot(dx, dy, dz) || 1;
-    const err = (actor.crouch ? 0.01 : 0.028) + Math.min(0.06, dist * 0.0012);
+    const diff = state.difficulty || 1;
+    const err = ((actor.crouch ? 0.01 : 0.028) + Math.min(0.06, dist * 0.0012)) * diff;
     const rng = state.rng;
     actor.aimYaw = Math.atan2(-dx, -dz) + (rng.next() - 0.5) * err;
     actor.aimPitch = Math.atan2(dy, Math.hypot(dx, dz)) + (rng.next() - 0.5) * err * 0.5;
@@ -182,12 +183,13 @@ function walkPath(actor, dt) {
     actor.stuckX = actor.x;
     actor.stuckZ = actor.z;
   }
-  if (actor.stuck > 0.35) {
+  if (actor.stuck > 0.22) {
+    const side = (actor.id & 1) ? 0.28 : -0.28;
+    actor.x += Math.cos(actor.yaw) * side;
+    actor.z -= Math.sin(actor.yaw) * side;
     actor.cmd.jump = true;
-    actor.cmd.l = (actor.id & 1) === 0;
-    actor.cmd.r = !actor.cmd.l;
   }
-  if (actor.stuck > 0.85) {
+  if (actor.stuck > 0.55) {
     actor.goal = -1;
     actor.stuck = 0;
     if (actor.pathI < actor.pathN - 1) actor.pathI += 1;

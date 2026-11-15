@@ -36,6 +36,14 @@ if (audit.length) console.warn('map audit: ' + audit.join('; '));
 if (shotName) applyShot(shotName, seed || 7);
 else state.phase = 'title';
 
+document.getElementById('diff').addEventListener('click', (event) => {
+  const button = event.target.closest('button');
+  if (!button) return;
+  const levels = [1.55, 1, 0.62];
+  state.difficulty = levels[Number(button.dataset.d)] || 1;
+  const all = document.querySelectorAll('#diff button');
+  for (let i = 0; i < all.length; i++) all[i].classList.toggle('on', all[i] === button);
+});
 document.getElementById('play-ridge').addEventListener('click', () => begin('ridge'));
 document.getElementById('play-guard').addEventListener('click', () => begin('guard'));
 document.getElementById('resume').addEventListener('click', () => {

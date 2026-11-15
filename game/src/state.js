@@ -50,6 +50,7 @@ function makeActor(id) {
     aimYaw: 0, aimPitch: 0, target: -1, hold: -1, role: 'flex',
     utilCd: 0, radioCd: 0, burst: 0, burstCd: 0, scopeT: 0,
     stepAcc: 0, invest: -1, investT: 0, mode: 'path', throw: '',
+    assists: 0, tagged: -1,
   };
 }
 
@@ -75,6 +76,9 @@ export const state = {
   paused: false,
   buyOpen: false,
   scoreOpen: false,
+  difficulty: 1,
+  toast: '',
+  toastT: 0,
   playerOrg: 'ridge',
   actors: [],
   charge: {

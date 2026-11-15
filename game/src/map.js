@@ -20,8 +20,8 @@ export const SPAWN = {
 };
 
 export const landmarks = {
-  sun: { x: -52, y: 16, z: 4 },
-  cabin: { x: 25.4, y: 6.15, z: 18.6 },
+  sun: { x: -18, y: 8.2, z: 16 },
+  cabin: { x: 18.2, y: 7.35, z: 20.4 },
   pylons: [{ x: 16.5, z: 19.5 }, { x: 27.2, z: 12.4 }],
   cable: [
     { x: 14, y: 8.6, z: 22 },

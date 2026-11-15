@@ -61,7 +61,7 @@ function buildBuy(node) {
 function buildScoreRows(node) {
   for (let i = 0; i < 10; i++) {
     const row = document.createElement('tr');
-    row.innerHTML = '<td></td><td></td><td></td><td></td><td></td>';
+    row.innerHTML = '<td></td><td></td><td></td><td></td><td></td><td></td>';
     node.appendChild(row);
   }
 }
@@ -152,6 +152,11 @@ export function syncHud() {
   el.scope.hidden = you.scope < 0.45;
   const locked = document.pointerLockElement != null;
   el.hint.hidden = titleOn || state.buyOpen || state.paused || locked || state.phase === 'match' || !!state.shot;
+  const toast = document.getElementById('toast');
+  if (toast) {
+    toast.hidden = state.toastT <= 0;
+    if (state.toastT > 0) toast.textContent = state.toast;
+  }
   el.timer.classList.toggle('planted', state.phase === 'live' && state.charge.state === 'planted');
 }
 
@@ -281,7 +286,8 @@ function paintScore() {
     cells[1].textContent = ORG[actor.org].short + ' ' + side;
     cells[2].textContent = String(actor.kills);
     cells[3].textContent = String(actor.deaths);
-    cells[4].textContent = '$' + actor.money;
+    cells[4].textContent = String(actor.assists || 0);
+    cells[5].textContent = '$' + actor.money;
     rows[i].className = actor.org + (actor.alive ? '' : ' dead');
   }
 }

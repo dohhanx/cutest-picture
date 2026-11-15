@@ -25,6 +25,8 @@ export function startMatch(org) {
     actor.money = 800;
     actor.kills = 0;
     actor.deaths = 0;
+    actor.assists = 0;
+    actor.tagged = -1;
     actor.survived = false;
     actor.primary = null;
     actor.secondary = 'wick';
@@ -145,6 +147,7 @@ export function tickRound(dt) {
   }
   for (let i = 0; i < state.kills.length; i++) if (state.kills[i].life > 0) state.kills[i].life -= dt;
   if (state.hitMarker > 0) state.hitMarker -= dt;
+  if (state.toastT > 0) state.toastT -= dt;
   if (state.hurt > 0) state.hurt = Math.max(0, state.hurt - dt * 0.8);
   if (state.phase === 'buy') {
     state.phaseT -= dt;
@@ -199,7 +202,7 @@ export function endRound(winner, reason) {
   const mine = you.org === winner ? pay.winPay : pay.lossPay;
   state.banner.show = true;
   state.banner.title = titleFor(winner, reason);
-  state.banner.sub = subFor(reason);
+  state.banner.sub = subFor(reason) + '   MVP ' + mvpLine(winner);
   state.banner.money = '+$' + mine + '  this round';
   const list = state.actors;
   for (let i = 0; i < list.length; i++) list[i].survived = list[i].alive;
@@ -211,6 +214,19 @@ export function endRound(winner, reason) {
     state.phase = 'end';
     state.phaseT = END_TIME;
   }
+}
+
+function mvpLine(winner) {
+  let best = null;
+  let score = -999;
+  const list = state.actors;
+  for (let i = 0; i < list.length; i++) {
+    const actor = list[i];
+    if (actor.org !== winner) continue;
+    const value = actor.kills * 10 + actor.assists * 4 - actor.deaths;
+    if (value > score) { score = value; best = actor; }
+  }
+  return best ? best.name + ' ' + best.kills + '-' + best.deaths + '-' + best.assists : '';
 }
 
 function titleFor(winner, reason) {

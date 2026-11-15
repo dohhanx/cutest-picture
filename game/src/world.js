@@ -4,7 +4,7 @@
 import {
   Scene, PerspectiveCamera, WebGLRenderer, Color, Fog,
   DirectionalLight, HemisphereLight, AmbientLight, PointLight,
-  Mesh, Group, BoxGeometry, SphereGeometry, CylinderGeometry, ConeGeometry, PlaneGeometry,
+  Mesh, Group, Sprite, SpriteMaterial, BoxGeometry, SphereGeometry, CylinderGeometry, ConeGeometry, PlaneGeometry,
   MeshStandardMaterial, MeshBasicMaterial, CanvasTexture,
   PCFShadowMap, ACESFilmicToneMapping, SRGBColorSpace, DoubleSide, BackSide, AdditiveBlending,
 } from 'three';
@@ -38,7 +38,7 @@ export function buildWorld(canvas) {
   renderer.setSize(canvas.clientWidth || 1280, canvas.clientHeight || 720);
   renderer.outputColorSpace = SRGBColorSpace;
   renderer.toneMapping = ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.05;
+  renderer.toneMappingExposure = 1.12;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = PCFShadowMap;
   canvas.appendChild(renderer.domElement);
@@ -47,10 +47,10 @@ export function buildWorld(canvas) {
   scene.fog = new Fog(0xe8b48a, 58, 168);
   addSky();
 
-  scene.add(new HemisphereLight(0x9eb6d4, 0x5c4636, 0.62));
-  scene.add(new AmbientLight(0x3a2e28, 0.28));
+  scene.add(new HemisphereLight(0xc5d4e4, 0xa06a42, 1.05));
+  scene.add(new AmbientLight(0x8a6248, 0.55));
 
-  const sun = new DirectionalLight(0xffc48a, 2.7);
+  const sun = new DirectionalLight(0xffc070, 2.55);
   sun.position.set(landmarks.sun.x, landmarks.sun.y, landmarks.sun.z);
   sun.target.position.set(-4, 2, 10);
   sun.castShadow = true;
@@ -66,9 +66,12 @@ export function buildWorld(canvas) {
   scene.add(sun);
   scene.add(sun.target);
 
-  const fill = new DirectionalLight(0x7f96b8, 0.42);
-  fill.position.set(24, 14, 18);
+  const fill = new DirectionalLight(0x9eb4cc, 0.55);
+  fill.position.set(18, 12, 22);
   scene.add(fill);
+  const bounce = new DirectionalLight(0xffb080, 0.72);
+  bounce.position.set(8, 5, -28);
+  scene.add(bounce);
   const drying = new PointLight(0xffb070, 36, 16, 2);
   drying.position.set(-20, 4.7, 16.5);
   scene.add(drying);
@@ -76,14 +79,7 @@ export function buildWorld(canvas) {
   rope.position.set(22, 4.8, 16);
   scene.add(rope);
 
-  const sunDisc = new Mesh(new SphereGeometry(2.6, 18, 12), new MeshBasicMaterial({ color: 0xfff3c4, fog: false }));
-  sunDisc.position.set(landmarks.sun.x, landmarks.sun.y, landmarks.sun.z);
-  scene.add(sunDisc);
-  const sunGlow = new Mesh(new SphereGeometry(6.5, 16, 12), new MeshBasicMaterial({
-    color: 0xffb060, transparent: true, opacity: 0.28, fog: false, depthWrite: false, blending: AdditiveBlending,
-  }));
-  sunGlow.position.copy(sunDisc.position);
-  scene.add(sunGlow);
+  addSunSprite();
 
   const mats = {
     dirt: standard(dirtTexture(), 0.92, 0),
@@ -165,6 +161,28 @@ function addScale(p) {
   scene.add(pan);
 }
 
+function addSunSprite() {
+  const c = document.createElement('canvas');
+  c.width = 128;
+  c.height = 128;
+  const g = c.getContext('2d');
+  const rad = g.createRadialGradient(64, 64, 2, 64, 64, 62);
+  rad.addColorStop(0, 'rgba(255, 248, 220, 0.95)');
+  rad.addColorStop(0.16, 'rgba(255, 196, 110, 0.75)');
+  rad.addColorStop(0.42, 'rgba(255, 140, 60, 0.28)');
+  rad.addColorStop(1, 'rgba(255, 120, 40, 0)');
+  g.fillStyle = rad;
+  g.fillRect(0, 0, 128, 128);
+  const tex = new CanvasTexture(c);
+  tex.colorSpace = SRGBColorSpace;
+  const sprite = new Sprite(new SpriteMaterial({
+    map: tex, transparent: true, depthWrite: false, fog: false, blending: AdditiveBlending,
+  }));
+  sprite.position.set(landmarks.sun.x, landmarks.sun.y, landmarks.sun.z);
+  sprite.scale.set(22, 22, 1);
+  scene.add(sprite);
+}
+
 function addSky() {
   const c = document.createElement('canvas');
   c.width = 4;
@@ -216,18 +234,18 @@ function addCable() {
 
 function addCabin() {
   const group = new Group();
-  const wood = new MeshStandardMaterial({ color: 0x6a3e28, roughness: 0.78 });
+  const wood = new MeshStandardMaterial({ color: 0xd06a32, roughness: 0.62 });
   const body = new Mesh(boxGeo, wood);
-  body.scale.set(1.8, 1.35, 1.25);
+  body.scale.set(2.4, 1.45, 1.35);
   body.castShadow = true;
   group.add(body);
-  const roof = new Mesh(boxGeo, new MeshStandardMaterial({ color: 0x6a2218, roughness: 0.6 }));
-  roof.position.y = 0.85;
-  roof.scale.set(2.1, 0.16, 1.5);
+  const roof = new Mesh(boxGeo, new MeshStandardMaterial({ color: 0xf0d2a0, roughness: 0.55 }));
+  roof.position.y = 0.9;
+  roof.scale.set(2.7, 0.18, 1.7);
   group.add(roof);
-  const window = new Mesh(boxGeo, new MeshBasicMaterial({ color: 0xffb15a }));
-  window.position.set(0, 0.1, 0.64);
-  window.scale.set(0.7, 0.45, 0.05);
+  const window = new Mesh(boxGeo, new MeshBasicMaterial({ color: 0xffe2a8 }));
+  window.position.set(0, 0.12, 0.7);
+  window.scale.set(1.15, 0.62, 0.06);
   group.add(window);
   const rope = new Mesh(new CylinderGeometry(0.03, 0.03, 1.6, 6), new MeshStandardMaterial({ color: 0x2a2420 }));
   rope.position.y = 1.5;
@@ -254,7 +272,7 @@ function addCharge() {
 function addCharacter() {
   const group = new Group();
   const ridge = new MeshStandardMaterial({ color: 0xc4512a, roughness: 0.62, emissive: 0x4a1a0c, emissiveIntensity: 0.22 });
-  const guard = new MeshStandardMaterial({ color: 0x1a4d62, roughness: 0.55, emissive: 0x0b3040, emissiveIntensity: 0.2 });
+  const guard = new MeshStandardMaterial({ color: 0x3cb0c4, roughness: 0.48, emissive: 0x146070, emissiveIntensity: 0.55 });
   const cloth = new MeshStandardMaterial({ color: 0x2c261e, roughness: 0.82 });
   const skin = new MeshStandardMaterial({ color: 0xe4b898, roughness: 0.55 });
   const gunMat = new MeshStandardMaterial({ color: 0x2a3034, metalness: 0.62, roughness: 0.38 });
@@ -278,15 +296,15 @@ function addCharacter() {
   const armR = armL.clone();
   armR.position.x = 0.3;
   const rifle = new Mesh(boxGeo, gunMat);
-  rifle.position.set(0.2, 1.02, 0.28);
+  rifle.position.set(0.16, 1.02, -0.34);
   rifle.scale.set(0.05, 0.06, 0.42);
   const legL = new Mesh(boxGeo, cloth);
   legL.position.set(-0.1, 0.4, 0);
   legL.scale.set(0.12, 0.4, 0.12);
   const legR = legL.clone();
   legR.position.x = 0.1;
-  const flash = new Mesh(new SphereGeometry(0.22, 8, 6), new MeshBasicMaterial({ color: 0xfff0b0 }));
-  flash.position.set(0.2, 1.05, 0.52);
+  const flash = new Mesh(new SphereGeometry(0.28, 8, 6), new MeshBasicMaterial({ color: 0xfff4c0 }));
+  flash.position.set(0.16, 1.06, -0.62);
   flash.visible = false;
   group.add(helm, head, torso, vest, armL, armR, rifle, legL, legR, flash);
   group.userData = { torso, helm, armL, armR, legL, legR, ridge, guard, flash, fall: 0 };
@@ -406,8 +424,8 @@ export function syncWorld() {
     if (state.spectate >= 0 && state.actors[state.spectate].alive) subject = state.actors[state.spectate];
   }
   if (state.phase === 'title') {
-    camera.position.set(2, 7.2, -14);
-    camera.lookAt(-24, 6.5, 18);
+    camera.position.set(6, 4.8, -5);
+    camera.lookAt(18.2, 6.8, 19);
     camera.fov = 60;
   } else {
     const bob = Math.sin(state.time * 9) * Math.min(0.04, Math.hypot(subject.vx, subject.vz) * 0.008);
@@ -492,7 +510,7 @@ export function syncWorld() {
     if (!group.visible) continue;
     group.position.set(s.x, s.y, s.z);
     const grow = 0.85 + Math.min(1, (16 - s.life) / 2) * 0.35;
-    group.scale.setScalar(grow);
+    group.scale.setScalar(grow * (s.r / 4.25));
   }
 
   for (let i = 0; i < nadeMeshes.length; i++) {

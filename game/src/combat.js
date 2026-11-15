@@ -121,6 +121,11 @@ export function applyHit(victim, gun, part, penMul, attacker) {
     state.hitMarker = 0.14;
     state.headMarker = part === 'head';
   }
+  if (attacker && victim.tagged >= 0 && victim.tagged !== attacker.id) {
+    const prev = state.actors[victim.tagged];
+    if (prev && prev.org === attacker.org) prev.assists += 1;
+  }
+  if (attacker) victim.tagged = attacker.id;
   wound(victim, amount, attacker, gun.name, gun.kill);
 }
 
@@ -146,6 +151,10 @@ export function wound(victim, amount, attacker, label, reward) {
   if (attacker && attacker !== victim) {
     attacker.kills += 1;
     attacker.money += reward || 300;
+    if (attacker.id === 0) {
+      state.toast = '+$' + (reward || 300) + '  ' + label;
+      state.toastT = 2.2;
+    }
     pushKill(attacker.name + '   ' + label + '   ' + victim.name, attacker.org);
   } else {
     pushKill(victim.name + ' is down', victim.org);

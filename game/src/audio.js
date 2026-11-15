@@ -74,8 +74,35 @@ export function click() {
   burst(1400, 0.03, 0.05, 'square');
 }
 
-export function step() {
-  noise(180, 0.04, 0.04);
+export function step(pan, gain) {
+  noisePan(180, 0.04, gain == null ? 0.04 : gain, pan || 0);
+}
+
+function noisePan(freq, dur, gain, pan) {
+  try {
+    const c = ac();
+    if (c.state !== 'running') return;
+    const n = Math.max(1, (dur * c.sampleRate) | 0);
+    const buffer = c.createBuffer(1, n, c.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < n; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / n);
+    const src = c.createBufferSource();
+    src.buffer = buffer;
+    const filter = c.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.value = freq;
+    const g = c.createGain();
+    g.gain.value = gain;
+    const stereo = c.createStereoPanner();
+    stereo.pan.value = Math.max(-1, Math.min(1, pan));
+    src.connect(filter);
+    filter.connect(g);
+    g.connect(stereo);
+    stereo.connect(c.destination);
+    src.start();
+  } catch (err) {
+    ctx = null;
+  }
 }
 
 export function boom() {

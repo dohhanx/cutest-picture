@@ -57,10 +57,10 @@ function setupCover() {
   state.buyOpen = false;
   state.banner.show = false;
   const you = player();
-  you.x = -5.2;
-  you.y = 3.05;
-  you.z = 8.6;
-  you.yaw = 1.92;
+  you.x = 6.2;
+  you.y = 2.55;
+  you.z = -0.9;
+  you.yaw = Math.atan2(-(2.6 - you.x), -(7.4 - you.z));
   you.pitch = 0.02;
   you.money = 3150;
   you.grounded = true;
@@ -75,31 +75,24 @@ function setupCover() {
   you.nades.veil = 1;
   you.slot = 'primary';
 
-  placeFighter(state.actors[5], -14.2, 3.05, 10.35, you.x + 0.6, you.y + 1.3, you.z - 0.4);
-  placeFighter(state.actors[6], -16.8, 3.05, 10.7, -12.5, 4.4, 9.4);
-  placeFighter(state.actors[7], -12.4, 3.05, 10.9, -18.6, 4.2, 10.2);
+  placeFighter(state.actors[5], 2.6, 3.05, 7.4, you.x - 0.25, you.y + 1.15, you.z);
+  placeFighter(state.actors[6], 5.1, 3.05, 8.7, -2.4, 4.5, 8.2);
+  placeFighter(state.actors[7], 0.8, 3.05, 9.1, 6.2, 4.2, 4.6);
   state.actors[5].muzzleT = 1;
   state.actors[1].alive = false;
   state.actors[4].alive = false;
   state.actors[8].alive = false;
   state.actors[9].alive = false;
 
-  const nade = state.nades[0];
-  nade.life = 1;
-  nade.kind = 'veil';
-  nade.fuse = 0.02;
-  nade.owner = 1;
-  nade.org = 'ridge';
-  nade.x = -9.2;
-  nade.y = 3.4;
-  nade.z = 6.6;
-  nade.vx = 0;
-  nade.vy = 0;
-  nade.vz = 0;
-  tickGrenades(0.05);
+  const veil = state.smokes[0];
+  veil.life = 14;
+  veil.x = -28;
+  veil.y = 2.2;
+  veil.z = 3;
+  veil.r = 1.7;
 
   fireBullet(state.actors[5], GUNS.terrace, 'terrace');
-  aim(state.actors[5], you.x + 0.6, you.y + 1.3, you.z - 0.4);
+  aim(state.actors[5], you.x - 0.25, you.y + 1.15, you.z);
   fireBullet(state.actors[7], GUNS.terrace, 'terrace');
   aim(state.actors[7], -8.4, 4.3, 9.6);
   you.alive = true;
@@ -109,9 +102,9 @@ function setupCover() {
   state.hitMarker = 0.5;
   state.headMarker = false;
 
-  pushKill('MOSS   Terrace   IVO', 'ridge');
   pushKill('NESSA   Ember   BRAM', 'guard');
   pushKill('JUNIPER   Terrace   CALDER', 'ridge');
+  pushKill('ASH   Terrace   NESSA', 'ridge');
   pushRadio('JUNIPER: Contact, Drying House.');
   pushRadio('MOSS: Veil smoke, mid.');
   pushRadio('IVO: Rotating to Drying House.');
@@ -139,8 +132,8 @@ function setupPlant() {
   you.x = 21.35;
   you.y = 3.05;
   you.z = 14.9;
-  you.yaw = Math.PI - 0.42;
-  you.pitch = -0.06;
+  you.yaw = Math.PI - 0.28;
+  you.pitch = -0.02;
   you.hp = 64;
   you.armour = 48;
   you.helmet = true;

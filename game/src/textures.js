@@ -22,8 +22,10 @@ function finish(c, repeatX, repeatY) {
 export function dirtTexture() {
   const c = canvas(256, 256);
   const g = c.getContext('2d');
-  g.fillStyle = '#7a5a3e';
+  g.fillStyle = '#b08968';
   g.fillRect(0, 0, 256, 256);
+  g.fillStyle = '#8d6a4c';
+  for (let i = 0; i < 40; i++) g.fillRect((i * 53) % 250, (i * 37) % 250, 14, 6);
   for (let i = 0; i < 90; i++) {
     g.fillStyle = i % 2 ? 'rgba(60,32,18,0.25)' : 'rgba(196,150,96,0.18)';
     g.fillRect((i * 47) % 256, (i * 29) % 256, 18, 8);
