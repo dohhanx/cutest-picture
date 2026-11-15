@@ -13,6 +13,7 @@ import { tickBeep, unlock } from './audio.js';
 import { applyShot } from './shots.js';
 import { auditMap } from './map.js';
 import { buy } from './economy.js';
+import { giveGun } from './weapons.js';
 
 const canvas = document.getElementById('game');
 const params = new URLSearchParams(location.search);
@@ -117,6 +118,7 @@ function simulate(dt) {
   tickGrenades(dt);
   tickWeapons(dt);
   tickRound(dt);
+  tickDrops(dt);
   decay(dt);
   tickBeep(state.charge, state.time);
 }
@@ -135,6 +137,24 @@ function hotkeys() {
   }
   if (edge('Escape')) state.paused = !state.paused;
   state.scoreOpen = held('Tab');
+}
+
+function tickDrops(dt) {
+  const you = player();
+  const drops = state.drops;
+  for (let i = 0; i < drops.length; i++) {
+    const drop = drops[i];
+    if (drop.life <= 0) continue;
+    drop.life -= dt;
+    if (!you.alive) continue;
+    const dx = you.x - drop.x;
+    const dz = you.z - drop.z;
+    if (dx * dx + dz * dz > 1.7 || Math.abs(you.y - drop.y) > 1.5) continue;
+    if (!you.primary || you.cmd.useEdge) {
+      giveGun(you, drop.id);
+      drop.life = 0;
+    }
+  }
 }
 
 function decay(dt) {

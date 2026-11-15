@@ -20,8 +20,8 @@ export const SPAWN = {
 };
 
 export const landmarks = {
-  sun: { x: -6, y: 24, z: -42 },
-  cabin: { x: 22, y: 6.55, z: 17.2 },
+  sun: { x: -52, y: 16, z: 4 },
+  cabin: { x: 25.4, y: 6.15, z: 18.6 },
   pylons: [{ x: 16.5, z: 19.5 }, { x: 27.2, z: 12.4 }],
   cable: [
     { x: 14, y: 8.6, z: 22 },
@@ -30,10 +30,11 @@ export const landmarks = {
     { x: 44, y: 6.4, z: -32 },
   ],
   mountains: [
-    { x: -70, z: 130, h: 36, r: 46 },
-    { x: 10, z: 150, h: 48, r: 54 },
-    { x: 90, z: 120, h: 32, r: 40 },
-    { x: -80, z: -130, h: 22, r: 36 },
+    { x: -118, z: 6, h: 28, r: 36, c: 0x5e7896 },
+    { x: -145, z: 48, h: 40, r: 46, c: 0x7c96b0 },
+    { x: -88, z: 108, h: 48, r: 54, c: 0xa4bdd4 },
+    { x: 36, z: 168, h: 54, r: 62, c: 0xb9cce0 },
+    { x: -30, z: -148, h: 24, r: 40, c: 0x8aa4be },
   ],
 };
 

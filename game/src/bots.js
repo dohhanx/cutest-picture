@@ -182,10 +182,15 @@ function walkPath(actor, dt) {
     actor.stuckX = actor.x;
     actor.stuckZ = actor.z;
   }
-  if (actor.stuck > 0.75) {
+  if (actor.stuck > 0.35) {
     actor.cmd.jump = true;
+    actor.cmd.l = (actor.id & 1) === 0;
+    actor.cmd.r = !actor.cmd.l;
+  }
+  if (actor.stuck > 0.85) {
     actor.goal = -1;
     actor.stuck = 0;
+    if (actor.pathI < actor.pathN - 1) actor.pathI += 1;
   }
 }
 

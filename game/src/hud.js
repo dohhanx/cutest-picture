@@ -4,7 +4,7 @@ import { state, player, sideOf, ORG } from './state.js';
 import { CATALOG, buy, NADE_CAP } from './economy.js';
 import { GUNS, gunId, ammoOf } from './weapons.js';
 import { clockText } from './rounds.js';
-import { sites } from './map.js';
+import { sites, boxes } from './map.js';
 
 const el = {};
 let mapCtx = null;
@@ -291,13 +291,22 @@ function paintMap(you) {
   const w = 168;
   const h = 168;
   ctx.clearRect(0, 0, w, h);
-  ctx.fillStyle = 'rgba(28,16,12,0.82)';
+  ctx.fillStyle = 'rgba(16, 22, 18, 0.88)';
   ctx.fillRect(0, 0, w, h);
-  ctx.strokeStyle = 'rgba(240,195,106,0.85)';
+  ctx.fillStyle = '#3e6a3a';
+  fillWorldRect(ctx, -14, -18, 28, 16, w, h);
+  fillWorldRect(ctx, -29, 6, 58, 20, w, h);
+  ctx.fillStyle = '#6d645c';
+  for (let i = 0; i < boxes.length; i++) {
+    const b = boxes[i];
+    if (!b.block || b.h < 1.3 || b.w > 36 || b.d > 36) continue;
+    fillWorldRect(ctx, b.minx, b.minz, b.w, b.d, w, h);
+  }
+  ctx.strokeStyle = 'rgba(240,195,106,0.9)';
   ctx.lineWidth = 2;
-  ctx.strokeRect(8, 8, w - 16, h - 16);
+  ctx.strokeRect(6, 6, w - 12, h - 12);
   ctx.fillStyle = '#f6f0e6';
-  ctx.font = '700 16px Georgia, serif';
+  ctx.font = '700 15px Georgia, serif';
   ctx.textAlign = 'center';
   markSite(ctx, sites[0].x, sites[0].z, 'A', w, h);
   markSite(ctx, sites[1].x, sites[1].z, 'B', w, h);
@@ -318,13 +327,24 @@ function paintMap(you) {
   }
   for (let i = 0; i < state.actors.length; i++) {
     const actor = state.actors[i];
-    if (!actor.alive || actor.org !== you.org) continue;
+    if (!actor.alive) continue;
     const p = worldToMap(actor.x, actor.z, w, h);
-    ctx.fillStyle = actor.id === 0 ? '#f0c36a' : '#8fd0ea';
+    const px = p.x;
+    const py = p.y;
+    const foe = actor.org !== you.org;
+    ctx.fillStyle = actor.id === 0 ? '#f0c36a' : foe ? '#ff6a45' : '#7fd0ea';
     ctx.beginPath();
-    ctx.arc(p.x, p.y, actor.id === 0 ? 4 : 3, 0, 6.28);
+    ctx.arc(px, py, actor.id === 0 ? 4 : 3, 0, 6.28);
     ctx.fill();
   }
+}
+
+function fillWorldRect(ctx, x, z, rw, rd, w, h) {
+  const a = worldToMap(x, z + rd, w, h);
+  const ax = a.x;
+  const ay = a.y;
+  const b = worldToMap(x + rw, z, w, h);
+  ctx.fillRect(ax, ay, b.x - ax, b.y - ay);
 }
 
 const _mp = { x: 0, y: 0 };

@@ -5,8 +5,8 @@ import {
   Scene, PerspectiveCamera, WebGLRenderer, Color, Fog,
   DirectionalLight, HemisphereLight, AmbientLight, PointLight,
   Mesh, Group, BoxGeometry, SphereGeometry, CylinderGeometry, ConeGeometry, PlaneGeometry,
-  MeshStandardMaterial, MeshBasicMaterial,
-  PCFShadowMap, ACESFilmicToneMapping, SRGBColorSpace, DoubleSide,
+  MeshStandardMaterial, MeshBasicMaterial, CanvasTexture,
+  PCFShadowMap, ACESFilmicToneMapping, SRGBColorSpace, DoubleSide, BackSide, AdditiveBlending,
 } from 'three';
 import { state, player } from './state.js';
 import { boxes, props, landmarks } from './map.js';
@@ -26,6 +26,7 @@ const tracers = [];
 const smokeGroups = [];
 const nadeMeshes = [];
 const impactMeshes = [];
+const dropMeshes = [];
 let chargeMesh = null;
 let chargeBulb = null;
 let cabin = null;
@@ -37,18 +38,19 @@ export function buildWorld(canvas) {
   renderer.setSize(canvas.clientWidth || 1280, canvas.clientHeight || 720);
   renderer.outputColorSpace = SRGBColorSpace;
   renderer.toneMapping = ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.22;
+  renderer.toneMappingExposure = 1.05;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = PCFShadowMap;
   canvas.appendChild(renderer.domElement);
 
-  scene.background = new Color(0xf0a86a);
-  scene.fog = new Fog(0xe7a36a, 42, 140);
+  scene.background = new Color(0x2a2458);
+  scene.fog = new Fog(0xe8b48a, 58, 168);
+  addSky();
 
-  scene.add(new HemisphereLight(0xffd7b0, 0x4a5530, 1.05));
-  scene.add(new AmbientLight(0x6a4030, 0.55));
+  scene.add(new HemisphereLight(0x9eb6d4, 0x5c4636, 0.62));
+  scene.add(new AmbientLight(0x3a2e28, 0.28));
 
-  const sun = new DirectionalLight(0xffb15e, 4.2);
+  const sun = new DirectionalLight(0xffc48a, 2.7);
   sun.position.set(landmarks.sun.x, landmarks.sun.y, landmarks.sun.z);
   sun.target.position.set(-4, 2, 10);
   sun.castShadow = true;
@@ -64,8 +66,8 @@ export function buildWorld(canvas) {
   scene.add(sun);
   scene.add(sun.target);
 
-  const fill = new DirectionalLight(0x9eb7d8, 0.55);
-  fill.position.set(-20, 18, 30);
+  const fill = new DirectionalLight(0x7f96b8, 0.42);
+  fill.position.set(24, 14, 18);
   scene.add(fill);
   const drying = new PointLight(0xffb070, 36, 16, 2);
   drying.position.set(-20, 4.7, 16.5);
@@ -74,9 +76,14 @@ export function buildWorld(canvas) {
   rope.position.set(22, 4.8, 16);
   scene.add(rope);
 
-  const sunBall = new Mesh(new SphereGeometry(4.2, 16, 12), new MeshBasicMaterial({ color: 0xffe0b0, fog: false }));
-  sunBall.position.set(landmarks.sun.x, landmarks.sun.y, landmarks.sun.z);
-  scene.add(sunBall);
+  const sunDisc = new Mesh(new SphereGeometry(2.6, 18, 12), new MeshBasicMaterial({ color: 0xfff3c4, fog: false }));
+  sunDisc.position.set(landmarks.sun.x, landmarks.sun.y, landmarks.sun.z);
+  scene.add(sunDisc);
+  const sunGlow = new Mesh(new SphereGeometry(6.5, 16, 12), new MeshBasicMaterial({
+    color: 0xffb060, transparent: true, opacity: 0.28, fog: false, depthWrite: false, blending: AdditiveBlending,
+  }));
+  sunGlow.position.copy(sunDisc.position);
+  scene.add(sunGlow);
 
   const mats = {
     dirt: standard(dirtTexture(), 0.92, 0),
@@ -116,6 +123,7 @@ export function buildWorld(canvas) {
   for (let i = 0; i < state.smokes.length; i++) smokeGroups.push(addSmoke());
   for (let i = 0; i < state.nades.length; i++) nadeMeshes.push(addNadeMesh());
   for (let i = 0; i < state.impacts.length; i++) impactMeshes.push(addImpactMesh());
+  for (let i = 0; i < state.drops.length; i++) dropMeshes.push(addDropMesh());
   viewRoot = addViewmodel();
   camera.add(viewRoot);
   scene.add(camera);
@@ -157,15 +165,36 @@ function addScale(p) {
   scene.add(pan);
 }
 
+function addSky() {
+  const c = document.createElement('canvas');
+  c.width = 4;
+  c.height = 256;
+  const g = c.getContext('2d');
+  const grad = g.createLinearGradient(0, 0, 0, 256);
+  grad.addColorStop(0, '#241c4e');
+  grad.addColorStop(0.42, '#6a4a72');
+  grad.addColorStop(0.7, '#d47848');
+  grad.addColorStop(1, '#f3c48a');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 4, 256);
+  const tex = new CanvasTexture(c);
+  tex.colorSpace = SRGBColorSpace;
+  const sky = new Mesh(new SphereGeometry(200, 48, 32), new MeshBasicMaterial({
+    map: tex, side: BackSide, fog: false, depthWrite: false,
+  }));
+  sky.position.y = 8;
+  scene.add(sky);
+}
+
 function addMountains() {
-  const mat = new MeshStandardMaterial({ color: 0x7e96b4, roughness: 1, metalness: 0, fog: false });
-  const geo = new ConeGeometry(1, 1, 6);
+  const geo = new ConeGeometry(1, 1, 7);
   const list = landmarks.mountains;
   for (let i = 0; i < list.length; i++) {
     const m = list[i];
+    const mat = new MeshStandardMaterial({ color: m.c, roughness: 1, metalness: 0, fog: false });
     const mesh = new Mesh(geo, mat);
-    mesh.position.set(m.x, m.h * 0.35, m.z);
-    mesh.scale.set(m.r, m.h, m.r);
+    mesh.position.set(m.x, m.h * 0.28, m.z);
+    mesh.scale.set(m.r * 1.25, m.h * 0.5, m.r * 0.9);
     scene.add(mesh);
   }
 }
@@ -187,7 +216,7 @@ function addCable() {
 
 function addCabin() {
   const group = new Group();
-  const wood = new MeshStandardMaterial({ color: 0x8a5434, roughness: 0.75 });
+  const wood = new MeshStandardMaterial({ color: 0x6a3e28, roughness: 0.78 });
   const body = new Mesh(boxGeo, wood);
   body.scale.set(1.8, 1.35, 1.25);
   body.castShadow = true;
@@ -200,6 +229,9 @@ function addCabin() {
   window.position.set(0, 0.1, 0.64);
   window.scale.set(0.7, 0.45, 0.05);
   group.add(window);
+  const rope = new Mesh(new CylinderGeometry(0.03, 0.03, 1.6, 6), new MeshStandardMaterial({ color: 0x2a2420 }));
+  rope.position.y = 1.5;
+  group.add(rope);
   const c = landmarks.cabin;
   group.position.set(c.x, c.y, c.z);
   scene.add(group);
@@ -221,35 +253,43 @@ function addCharge() {
 
 function addCharacter() {
   const group = new Group();
-  const ridge = new MeshStandardMaterial({ color: 0xd24a2c, roughness: 0.6, emissive: 0x5a1a0c, emissiveIntensity: 0.45 });
-  const guard = new MeshStandardMaterial({ color: 0x3d88b0, roughness: 0.55, emissive: 0x12384c, emissiveIntensity: 0.5 });
-  const skin = new MeshStandardMaterial({ color: 0xe0b090, roughness: 0.6 });
-  const cloth = new MeshStandardMaterial({ color: 0x2a2420, roughness: 0.8 });
-  const torso = new Mesh(boxGeo, ridge);
-  torso.position.y = 1.15;
-  torso.scale.set(0.46, 0.52, 0.28);
-  torso.castShadow = true;
-  group.add(torso);
+  const ridge = new MeshStandardMaterial({ color: 0xc4512a, roughness: 0.62, emissive: 0x4a1a0c, emissiveIntensity: 0.22 });
+  const guard = new MeshStandardMaterial({ color: 0x1a4d62, roughness: 0.55, emissive: 0x0b3040, emissiveIntensity: 0.2 });
+  const cloth = new MeshStandardMaterial({ color: 0x2c261e, roughness: 0.82 });
+  const skin = new MeshStandardMaterial({ color: 0xe4b898, roughness: 0.55 });
+  const gunMat = new MeshStandardMaterial({ color: 0x2a3034, metalness: 0.62, roughness: 0.38 });
+  const helm = new Mesh(boxGeo, ridge);
+  helm.position.y = 1.64;
+  helm.scale.set(0.3, 0.14, 0.32);
+  helm.castShadow = true;
   const head = new Mesh(boxGeo, skin);
-  head.position.y = 1.58;
-  head.scale.set(0.24, 0.24, 0.24);
-  head.castShadow = true;
-  group.add(head);
+  head.position.y = 1.5;
+  head.scale.set(0.2, 0.18, 0.2);
+  const torso = new Mesh(boxGeo, ridge);
+  torso.position.y = 1.12;
+  torso.scale.set(0.44, 0.46, 0.24);
+  torso.castShadow = true;
+  const vest = new Mesh(boxGeo, new MeshStandardMaterial({ color: 0x3d3428, roughness: 0.7 }));
+  vest.position.set(0, 1.14, 0.1);
+  vest.scale.set(0.3, 0.3, 0.08);
   const armL = new Mesh(boxGeo, ridge);
-  armL.position.set(-0.34, 1.16, 0);
-  armL.scale.set(0.12, 0.46, 0.12);
-  group.add(armL);
+  armL.position.set(-0.3, 1.1, 0.06);
+  armL.scale.set(0.1, 0.38, 0.1);
   const armR = armL.clone();
-  armR.position.x = 0.34;
-  group.add(armR);
+  armR.position.x = 0.3;
+  const rifle = new Mesh(boxGeo, gunMat);
+  rifle.position.set(0.2, 1.02, 0.28);
+  rifle.scale.set(0.05, 0.06, 0.42);
   const legL = new Mesh(boxGeo, cloth);
-  legL.position.set(-0.12, 0.4, 0);
-  legL.scale.set(0.14, 0.8, 0.16);
-  group.add(legL);
+  legL.position.set(-0.1, 0.4, 0);
+  legL.scale.set(0.12, 0.4, 0.12);
   const legR = legL.clone();
-  legR.position.x = 0.12;
-  group.add(legR);
-  group.userData = { torso, head, armL, armR, legL, legR, ridge, guard, skin };
+  legR.position.x = 0.1;
+  const flash = new Mesh(new SphereGeometry(0.22, 8, 6), new MeshBasicMaterial({ color: 0xfff0b0 }));
+  flash.position.set(0.2, 1.05, 0.52);
+  flash.visible = false;
+  group.add(helm, head, torso, vest, armL, armR, rifle, legL, legR, flash);
+  group.userData = { torso, helm, armL, armR, legL, legR, ridge, guard, flash, fall: 0 };
   scene.add(group);
   return group;
 }
@@ -285,6 +325,14 @@ function addNadeMesh() {
   return mesh;
 }
 
+function addDropMesh() {
+  const mesh = new Mesh(boxGeo, new MeshStandardMaterial({ color: 0xc4b08a, metalness: 0.45, roughness: 0.4 }));
+  mesh.scale.set(0.55, 0.12, 0.14);
+  mesh.visible = false;
+  scene.add(mesh);
+  return mesh;
+}
+
 function addImpactMesh() {
   const mesh = new Mesh(new SphereGeometry(0.06, 6, 5), new MeshBasicMaterial({ color: 0x2a2118 }));
   mesh.visible = false;
@@ -292,31 +340,57 @@ function addImpactMesh() {
   return mesh;
 }
 
-function gunMesh(color, length) {
+function vmBox(group, mat, x, y, z, sx, sy, sz) {
+  const mesh = new Mesh(boxGeo, mat);
+  mesh.position.set(x, y, z);
+  mesh.scale.set(sx, sy, sz);
+  group.add(mesh);
+  return mesh;
+}
+
+function vmTube(group, mat, x, y, z, r, len) {
+  const mesh = new Mesh(new CylinderGeometry(1, 1, 1, 8), mat);
+  mesh.rotation.x = Math.PI / 2;
+  mesh.position.set(x, y, z);
+  mesh.scale.set(r, len, r);
+  group.add(mesh);
+  return mesh;
+}
+
+function buildViewGun(kind, metalHex, sleeveHex) {
   const group = new Group();
-  const mat = new MeshStandardMaterial({ color, roughness: 0.45, metalness: 0.35 });
-  const body = new Mesh(boxGeo, mat);
-  body.scale.set(0.07, 0.09, length);
-  body.position.set(0, 0, -length * 0.35);
-  group.add(body);
-  const grip = new Mesh(boxGeo, new MeshStandardMaterial({ color: 0x3a2418, roughness: 0.7 }));
-  grip.scale.set(0.05, 0.12, 0.06);
-  grip.position.set(0, -0.08, 0.02);
-  group.add(grip);
+  const metal = new MeshStandardMaterial({ color: metalHex, metalness: 0.72, roughness: 0.32 });
+  const wood = new MeshStandardMaterial({ color: 0x5a3824, roughness: 0.78 });
+  const hand = new MeshStandardMaterial({ color: 0xe4b898, roughness: 0.55 });
+  const sleeve = new MeshStandardMaterial({ color: sleeveHex, roughness: 0.7 });
+  const barrel = kind === 'sniper' ? 0.62 : kind === 'rifle' ? 0.46 : kind === 'smg' ? 0.3 : 0.16;
+  const stockLen = kind === 'pistol' ? 0.02 : 0.16;
+  vmBox(group, metal, 0, 0, -0.06, 0.055, 0.075, kind === 'pistol' ? 0.16 : 0.22);
+  vmTube(group, metal, 0, 0.012, -0.16 - barrel * 0.45, kind === 'sniper' ? 0.011 : 0.016, barrel);
+  vmBox(group, wood, 0, -0.015, 0.1, 0.04, 0.055, stockLen);
+  vmBox(group, metal, 0, -0.075, -0.02, 0.028, kind === 'pistol' ? 0.07 : 0.12, 0.04);
+  if (kind !== 'pistol') vmBox(group, metal, 0, 0.055, -0.02, 0.016, 0.028, kind === 'sniper' ? 0.16 : 0.07);
+  if (kind === 'sniper') vmTube(group, metal, 0, 0.08, -0.08, 0.016, 0.18);
+  vmBox(group, hand, 0.02, -0.055, 0.02, 0.05, 0.045, 0.07);
+  vmBox(group, sleeve, 0.04, -0.07, 0.1, 0.065, 0.05, 0.11);
+  const flash = new Mesh(new SphereGeometry(0.045, 6, 5), new MeshBasicMaterial({ color: 0xfff0c0 }));
+  flash.position.set(0, 0.012, -0.18 - barrel);
+  flash.visible = false;
+  group.add(flash);
+  group.userData.flash = flash;
   return group;
 }
 
 function addViewmodel() {
   const root = new Group();
-  root.position.set(0.26, -0.24, -0.42);
-  viewBySlot.wick = gunMesh(0xc8c2b4, 0.28);
-  viewBySlot.ember = gunMesh(0x8a2e22, 0.32);
-  viewBySlot.thresher = gunMesh(0x6e5a3a, 0.46);
-  viewBySlot.terrace = gunMesh(0xd7c4a2, 0.62);
-  viewBySlot.ridgefire = gunMesh(0x9a3b28, 0.66);
-  viewBySlot.longglass = gunMesh(0x2c3338, 0.84);
-  const names = Object.keys(viewBySlot);
-  for (let i = 0; i < names.length; i++) root.add(viewBySlot[names[i]]);
+  root.position.set(0.24, -0.22, -0.38);
+  viewBySlot.wick = buildViewGun('pistol', 0xc8c4b8, 0x8a3a24);
+  viewBySlot.ember = buildViewGun('pistol', 0x6e2e28, 0x8a3a24);
+  viewBySlot.thresher = buildViewGun('smg', 0x6a5a3a, 0x8a3a24);
+  viewBySlot.terrace = buildViewGun('rifle', 0xd7c4a2, 0x8a3a24);
+  viewBySlot.ridgefire = buildViewGun('rifle', 0x8a3a28, 0x8a3a24);
+  viewBySlot.longglass = buildViewGun('sniper', 0x2c3338, 0x1a4d62);
+  root.add(viewBySlot.wick, viewBySlot.ember, viewBySlot.thresher, viewBySlot.terrace, viewBySlot.ridgefire, viewBySlot.longglass);
   return root;
 }
 
@@ -332,9 +406,9 @@ export function syncWorld() {
     if (state.spectate >= 0 && state.actors[state.spectate].alive) subject = state.actors[state.spectate];
   }
   if (state.phase === 'title') {
-    camera.position.set(-4.5, 5.4, -8);
-    camera.lookAt(-18, 4.6, 14);
-    camera.fov = 64;
+    camera.position.set(2, 7.2, -14);
+    camera.lookAt(-24, 6.5, 18);
+    camera.fov = 60;
   } else {
     const bob = Math.sin(state.time * 9) * Math.min(0.04, Math.hypot(subject.vx, subject.vz) * 0.008);
     camera.position.set(subject.x, eyeY(subject) + bob, subject.z);
@@ -356,16 +430,25 @@ export function syncWorld() {
     const parts = group.userData;
     const jacket = actor.org === 'ridge' ? parts.ridge : parts.guard;
     parts.torso.material = jacket;
+    parts.helm.material = jacket;
     parts.armL.material = jacket;
     parts.armR.material = jacket;
-    const crouch = actor.crouch ? 0.72 : 1;
-    parts.torso.position.y = 0.85 + 0.3 * crouch;
-    parts.head.position.y = 1.15 + 0.43 * crouch;
+    const speed = Math.hypot(actor.vx, actor.vz);
+    const swing = actor.alive ? Math.sin(state.time * 9 + actor.id) * Math.min(0.55, speed * 0.1) : 0;
+    parts.legL.rotation.x = swing;
+    parts.legR.rotation.x = -swing;
+    parts.armL.rotation.x = -swing * 0.7;
+    parts.armR.rotation.x = swing * 0.45;
+    const crouch = actor.crouch ? 0.22 : 0;
+    parts.torso.position.y = 1.12 - crouch;
+    parts.helm.position.y = 1.64 - crouch;
     if (!actor.alive) {
       group.visible = state.phase !== 'title';
-      group.rotation.z = 1.35;
-      group.position.y = actor.y + 0.15;
-    }
+      parts.fall = state.frozen ? 1.25 : Math.min(1.25, parts.fall + 0.08);
+      group.rotation.x = parts.fall;
+      group.position.y = actor.y + 0.08;
+    } else parts.fall = 0;
+    parts.flash.visible = actor.alive && actor.muzzleT > 0;
   }
 
   if (cabin) cabin.rotation.z = Math.sin(state.time * 0.7) * 0.025;
@@ -384,11 +467,22 @@ export function syncWorld() {
     const mesh = tracers[i];
     mesh.visible = t.life > 0 && state.phase !== 'title';
     if (!mesh.visible) continue;
-    const len = Math.hypot(t.x2 - t.x, t.y2 - t.y, t.z2 - t.z) || 0.01;
-    mesh.position.set((t.x + t.x2) / 2, (t.y + t.y2) / 2, (t.z + t.z2) / 2);
-    mesh.scale.set(0.028, 0.028, len);
-    mesh.lookAt(t.x2, t.y2, t.z2);
-    mesh.material.color.setHex(t.crit ? 0xff4d3a : 0xfff6d0);
+    let x2 = t.x2;
+    let y2 = t.y2;
+    let z2 = t.z2;
+    const cdx = x2 - camera.position.x;
+    const cdy = y2 - camera.position.y;
+    const cdz = z2 - camera.position.z;
+    if (cdx * cdx + cdy * cdy + cdz * cdz < 2.2) {
+      x2 = t.x + (x2 - t.x) * 0.72;
+      y2 = t.y + (y2 - t.y) * 0.72;
+      z2 = t.z + (z2 - t.z) * 0.72;
+    }
+    const len = Math.hypot(x2 - t.x, y2 - t.y, z2 - t.z) || 0.01;
+    mesh.position.set((t.x + x2) / 2, (t.y + y2) / 2, (t.z + z2) / 2);
+    mesh.scale.set(0.02, 0.02, len);
+    mesh.lookAt(x2, y2, z2);
+    mesh.material.color.setHex(t.crit ? 0xff5a3a : 0xffe08a);
   }
 
   for (let i = 0; i < smokeGroups.length; i++) {
@@ -411,6 +505,11 @@ export function syncWorld() {
     impactMeshes[i].visible = n.life > 0;
     if (n.life > 0) impactMeshes[i].position.set(n.x, n.y, n.z);
   }
+  for (let i = 0; i < dropMeshes.length; i++) {
+    const d = state.drops[i];
+    dropMeshes[i].visible = d.life > 0;
+    if (d.life > 0) dropMeshes[i].position.set(d.x, d.y, d.z);
+  }
 
   const gunName = you.slot === 'primary' ? you.primary : you.slot === 'secondary' ? you.secondary : '';
   viewBySlot.wick.visible = gunName === 'wick';
@@ -422,8 +521,14 @@ export function syncWorld() {
   viewRoot.visible = state.phase !== 'title' && you.alive && subject === you && you.scope < 0.4 && !!gunName;
   if (viewRoot.visible) {
     const speed = Math.hypot(you.vx, you.vz);
-    viewRoot.position.y = -0.24 + Math.sin(state.time * 9) * speed * 0.004;
-    viewRoot.rotation.x = -you.recoilP * 0.8;
+    const bob = Math.sin(state.time * 9) * Math.min(0.02, speed * 0.004);
+    const reloadDip = you.reload > 0 ? Math.sin((1 - you.reload) * 6.2) * 0.12 : 0;
+    viewRoot.position.y = -0.22 + bob - Math.abs(reloadDip);
+    viewRoot.position.x = 0.24 + Math.cos(state.time * 9) * bob;
+    viewRoot.rotation.x = -you.recoilP * 1.4 + reloadDip;
+    viewRoot.rotation.z = -you.recoilY * 0.4;
+    const gun = viewBySlot[gunName];
+    if (gun && gun.userData.flash) gun.userData.flash.visible = you.recoilI > 0 && you.recoilT < 0.045;
   }
 }
 

@@ -22,7 +22,7 @@ function finish(c, repeatX, repeatY) {
 export function dirtTexture() {
   const c = canvas(256, 256);
   const g = c.getContext('2d');
-  g.fillStyle = '#8a6244';
+  g.fillStyle = '#7a5a3e';
   g.fillRect(0, 0, 256, 256);
   for (let i = 0; i < 90; i++) {
     g.fillStyle = i % 2 ? 'rgba(60,32,18,0.25)' : 'rgba(196,150,96,0.18)';
@@ -34,10 +34,10 @@ export function dirtTexture() {
 export function teaTexture() {
   const c = canvas(256, 256);
   const g = c.getContext('2d');
-  g.fillStyle = '#3f6a34';
+  g.fillStyle = '#2f6a32';
   g.fillRect(0, 0, 256, 256);
   for (let row = 0; row < 8; row++) {
-    g.strokeStyle = row % 2 ? '#2c4c28' : '#6ea05a';
+    g.strokeStyle = row % 2 ? '#1e4a24' : '#63b45a';
     g.lineWidth = 8;
     g.beginPath();
     g.moveTo(0, 16 + row * 32);
@@ -62,7 +62,7 @@ export function bushTexture() {
 export function stoneTexture() {
   const c = canvas(256, 256);
   const g = c.getContext('2d');
-  g.fillStyle = '#8d847c';
+  g.fillStyle = '#c9bfb2';
   g.fillRect(0, 0, 256, 256);
   g.strokeStyle = '#5e564f';
   g.lineWidth = 4;
@@ -70,7 +70,7 @@ export function stoneTexture() {
     const off = y % 2 ? 40 : 0;
     for (let x = -1; x < 4; x++) {
       g.strokeRect(off + x * 86, y * 64 + 4, 78, 52);
-      g.fillStyle = y % 2 ? '#9a9086' : '#7b736b';
+      g.fillStyle = y % 2 ? '#d5cdc2' : '#b7aea2';
       g.fillRect(off + x * 86 + 6, y * 64 + 10, 66, 40);
     }
   }
@@ -80,10 +80,10 @@ export function stoneTexture() {
 export function woodTexture() {
   const c = canvas(256, 256);
   const g = c.getContext('2d');
-  g.fillStyle = '#6b4128';
+  g.fillStyle = '#4a2e1c';
   g.fillRect(0, 0, 256, 256);
   for (let i = 0; i < 7; i++) {
-    g.fillStyle = i % 2 ? '#8a5a36' : '#55321c';
+    g.fillStyle = i % 2 ? '#6b4228' : '#3a2416';
     g.fillRect(0, i * 36, 256, 32);
     g.fillStyle = 'rgba(255,220,170,0.08)';
     g.fillRect(20, i * 36 + 8, 180, 3);

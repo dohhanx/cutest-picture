@@ -133,6 +133,16 @@ export function wound(victim, amount, attacker, label, reward) {
   victim.alive = false;
   victim.deaths += 1;
   victim.cmd.fire = false;
+  if (victim.primary) {
+    const drop = state.drops[state.dropN % state.drops.length];
+    state.dropN += 1;
+    drop.life = 18;
+    drop.id = victim.primary;
+    drop.x = victim.x;
+    drop.y = victim.y + 0.25;
+    drop.z = victim.z;
+    victim.primary = null;
+  }
   if (attacker && attacker !== victim) {
     attacker.kills += 1;
     attacker.money += reward || 300;

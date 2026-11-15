@@ -89,6 +89,8 @@ export const state = {
   tracerN: 0,
   impacts: pool(16, () => ({ life: 0, x: 0, y: 0, z: 0 })),
   impactN: 0,
+  drops: pool(8, () => ({ life: 0, id: '', x: 0, y: 0, z: 0 })),
+  dropN: 0,
   sounds: pool(16, () => ({ until: 0, x: 0, z: 0, kind: 'gun', org: 'ridge', r: 0 })),
   soundN: 0,
   radio: ['', '', '', ''],

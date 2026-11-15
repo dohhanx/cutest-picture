@@ -2,6 +2,7 @@
 // Copies game/ and screenshots/ to the output directory and writes dossier.json
 // with the kit's buildDossier. Both grader runs must produce the same bytes.
 // Gate caps: 160 KiB of judged source text, 4 screenshots, 48 MiB under game/.
+// v2 keeps the same hand-in: copy game/ and screenshots/, then buildDossier.
 // Outside the sandbox, MAKEFUN_OUTPUT_DIR stands in for /output:
 //   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 
